@@ -18,8 +18,25 @@ class MainActivity : Activity() {
 
     private lateinit var out: TextView
 
+    private val engineResults = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private var healthServer: HealthServer? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // loopback-only 健康端点：root 验证用（curl 127.0.0.1:3431/healthz），无需读屏
+        try {
+            healthServer = HealthServer {
+                mapOf(
+                    "app" to "magpie-mobile-poc",
+                    "engine" to (engineResults["last"] ?: "not-run"),
+                    "magpie" to (engineResults["magpie"] ?: "pending"),
+                    "bun" to (engineResults["bun"] ?: "pending"),
+                    "nativeLibraryDir" to (applicationInfo.nativeLibraryDir ?: ""),
+                )
+            }.also { it.start() }
+        } catch (_: Exception) {
+        }
 
         val pad = (16 * resources.displayMetrics.density).toInt()
         val root = ScrollView(this)
@@ -58,6 +75,11 @@ class MainActivity : Activity() {
         btnBun.setOnClickListener { runEngine("libbun_exec.so", listOf("--version")) }
     }
 
+    override fun onDestroy() {
+        healthServer?.stop()
+        super.onDestroy()
+    }
+
     private fun runEngine(libName: String, args: List<String>) {
         val exe = File(applicationInfo.nativeLibraryDir, libName)
         append("=== 运行 " + libName + " " + args.joinToString(" ") + " ===" + "\n" +
@@ -85,7 +107,12 @@ class MainActivity : Activity() {
                 val done = proc.waitFor(60, TimeUnit.SECONDS)
                 if (!done) { proc.destroyForcibly(); append("结果: 超时(60s) 已强杀\n"); return@Thread }
                 t1.join(2000); t2.join(2000)
-                append("exit=" + proc.exitValue() + "\n")
+                val exitCode = proc.exitValue()
+                append("exit=" + exitCode + "\n")
+                // 记入缓存供 healthz 读取（引擎名取自载荷名）
+                val key = if (libName.contains("magpie")) "magpie" else "bun"
+                engineResults[key] = if (exitCode == 0) "ok: " + outBuf.toString().trim().take(120) else "exit=" + exitCode + ": " + errBuf.toString().trim().take(120)
+                engineResults["last"] = key
                 if (outBuf.isNotEmpty()) append("stdout:\n" + clip(outBuf.toString()) + "\n")
                 if (errBuf.isNotEmpty()) append("stderr:\n" + clip(errBuf.toString()) + "\n")
             } catch (e: Throwable) {
