@@ -1,0 +1,96 @@
+{
+ "magpie_hash": "5b0a793cd85ad171e15ecb9782621adcaf43e2e988180d0db32a1542b9c1fc26",
+ "magpie_hash_ok": true,
+ "magpie_elf": {
+  "file": "magpie-cli-android-arm64",
+  "size": 70910248,
+  "class": "ELF64",
+  "etype": "DYN(PIE)",
+  "machine": "AArch64",
+  "load_align_min": "0x10000",
+  "interp": "/system/bin/linker64",
+  "gnu_stack_exec": false,
+  "soname": null,
+  "dt_needed": [],
+  "android_note": null,
+  "termux_refs": 0,
+  "glibc_needed": [],
+  "g1_arm64": true,
+  "g2_pie": true,
+  "g3_bionic": true,
+  "g3_note": "bionic linker64",
+  "g4_no_glibc": true,
+  "g5_16k": true,
+  "g6_no_termux": true,
+  "gates_pass": true
+ },
+ "bun_zip_hash": "a1c7e2983f1bb65146beb256a4d72449f23042412bc2cf278aa6397ba27e0274",
+ "bun_zip_hash_ok": true,
+ "bun_zip_members": [
+  "bun-linux-aarch64-android/",
+  "bun-linux-aarch64-android/bun"
+ ],
+ "bun_elf": {
+  "file": "bun-android-arm64(解自bun-linux-aarch64-android/bun)",
+  "size": 86800440,
+  "class": "ELF64",
+  "etype": "DYN(PIE)",
+  "machine": "AArch64",
+  "load_align_min": "0x4000",
+  "interp": "/system/bin/linker64",
+  "gnu_stack_exec": false,
+  "soname": null,
+  "dt_needed": [
+   "libc.so",
+   "libm.so",
+   "libdl.so"
+  ],
+  "android_note": [
+   "\u001c\u0000\u0000\u0000r27c\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u000012479018"
+  ],
+  "termux_refs": 0,
+  "glibc_needed": [],
+  "g1_arm64": true,
+  "g2_pie": true,
+  "g3_bionic": true,
+  "g3_note": "bionic linker64",
+  "g4_no_glibc": true,
+  "g5_16k": true,
+  "g6_no_termux": true,
+  "gates_pass": true
+ },
+ "bun_size": 86800440,
+ "npm_tgz_sha256": "541186fc1f60fad0a6437a64dec28f237d861c3172d19478e9a54cc83e7ae6d5",
+ "npm_integrity_ok": true,
+ "npm_tgz_members": [],
+ "npm_bun_elf": {
+  "file": "bun-android-arm64(npm tarball)",
+  "size": 86800440,
+  "class": "ELF64",
+  "etype": "DYN(PIE)",
+  "machine": "AArch64",
+  "load_align_min": "0x4000",
+  "interp": "/system/bin/linker64",
+  "gnu_stack_exec": false,
+  "soname": null,
+  "dt_needed": [
+   "libc.so",
+   "libm.so",
+   "libdl.so"
+  ],
+  "android_note": [
+   "\u001c\u0000\u0000\u0000r27c\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u000012479018"
+  ],
+  "termux_refs": 0,
+  "glibc_needed": [],
+  "g1_arm64": true,
+  "g2_pie": true,
+  "g3_bionic": true,
+  "g3_note": "bionic linker64",
+  "g4_no_glibc": true,
+  "g5_16k": true,
+  "g6_no_termux": true,
+  "gates_pass": true
+ },
+ "npm_bun_size": 86800440
+}

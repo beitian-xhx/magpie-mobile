@@ -1,0 +1,2 @@
+5b0a793cd85ad171e15ecb9782621adcaf43e2e988180d0db32a1542b9c1fc26  magpie-cli-android-arm64 (v0.1.3188, usemagpie.ai/api/latest)
+a1c7e2983f1bb65146beb256a4d72449f23042412bc2cf278aa6397ba27e0274  bun-linux-aarch64-android.zip (bun-v1.4.2, Magpie bunSums)
