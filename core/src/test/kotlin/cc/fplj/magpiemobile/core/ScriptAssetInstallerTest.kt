@@ -41,7 +41,7 @@ class ScriptAssetInstallerTest {
 
     @Test
     fun oversizeRejected() {
-        val big = ByteArray(ScriptAssetInstaller.MAX_BYTES + 1)
+        val big = ByteArray((ScriptAssetInstaller.MAX_BYTES + 1).toInt())
         assertFailsWith<IllegalArgumentException> {
             ScriptAssetInstaller.install(File(root, "plugins"), "big.mjs", big)
         }
