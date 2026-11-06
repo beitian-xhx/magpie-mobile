@@ -23,17 +23,17 @@ data class SessionRecord(
     companion object {
         private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
-        fun fromJsonLine(line: String): SessionRecord? = try {
-            val o = json.parseToJsonElement(line).let { it as? kotlinx.serialization.json.JsonObject } ?: return null
-            val ts = (o["ts"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: return null
-            SessionRecord(
-                ts = ts,
-                role = (o["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return null,
-                engine = (o["engine"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "",
-                text = (o["text"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "",
-            )
-        } catch (_: Exception) {
-            null // 损坏行跳过
+        fun fromJsonLine(line: String): SessionRecord? {
+            return try {
+                val o = json.parseToJsonElement(line) as? kotlinx.serialization.json.JsonObject ?: return null
+                val ts = (o["ts"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: return null
+                val role = (o["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return null
+                val engine = (o["engine"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                val text = (o["text"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                SessionRecord(ts = ts, role = role, engine = engine, text = text)
+            } catch (_: Exception) {
+                null // 损坏行跳过
+            }
         }
     }
 }
