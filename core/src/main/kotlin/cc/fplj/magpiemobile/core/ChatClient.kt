@@ -40,8 +40,9 @@ class ChatClient(private val config: GatewayConfig) {
         try {
             conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
-            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                .bufferedReader().readText()
+            // 错误响应可能没有 body（如 429 空 body）：errorStream 可能为 null，不能直接读
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val text = stream?.bufferedReader()?.readText().orEmpty()
             if (code !in 200..299) throw ChatException("chat -> HTTP " + code, code)
             // 宽松返回原始 JSON：choices 形状上游未钉死（plan.md §4.2），由上层按需取字段
             return text
