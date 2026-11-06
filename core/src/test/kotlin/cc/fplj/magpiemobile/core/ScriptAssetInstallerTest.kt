@@ -18,7 +18,7 @@ class ScriptAssetInstallerTest {
         val f = ScriptAssetInstaller.install(File(root, "plugins"), "zcode.mjs", "export default {}".toByteArray())
         assertTrue(f.exists())
         assertFalse(f.canExecute())
-        assertEquals("export default {}".toByteArray().size.toLong(), f.length())
+        assertEquals<Long>("export default {}".toByteArray().size.toLong(), f.length())
     }
 
     @Test
