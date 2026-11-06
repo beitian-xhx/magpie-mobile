@@ -25,6 +25,9 @@ jobs:
       - name: Fetch verified engine assets
         run: bash scripts/fetch-assets.sh
 
+      - name: Run core contract tests
+        run: gradle :core:test --no-daemon --stacktrace
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 

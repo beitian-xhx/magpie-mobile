@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MagpieMobile"
 include(":app")
+include(":core")
