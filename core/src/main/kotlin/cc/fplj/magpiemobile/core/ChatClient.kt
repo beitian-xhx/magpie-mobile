@@ -1,6 +1,7 @@
 package cc.fplj.magpiemobile.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -25,7 +26,7 @@ class ChatClient(private val config: GatewayConfig) {
     fun complete(model: String, messages: List<Message>, maxTokens: Int? = null): String {
         val body = buildJsonObject {
             put("model", model)
-            put("messages", json.encodeToJsonElement(messages))
+            put("messages", json.encodeToJsonElement(ListSerializer(Message.serializer()), messages))
             if (maxTokens != null) put("max_tokens", maxTokens)
         }.toString()
 
