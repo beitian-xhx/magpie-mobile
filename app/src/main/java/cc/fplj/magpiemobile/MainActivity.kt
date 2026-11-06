@@ -33,6 +33,7 @@ class MainActivity : Activity() {
                 "filesDir: " + filesDir.absolutePath
             setTextIsSelectable(true)
         }
+        val btnDiag = Button(this).apply { text = "一键诊断（页大小 + 两引擎版本）" }
         val btnMagpie = Button(this).apply { text = "运行 magpie --version" }
         val btnBun = Button(this).apply { text = "运行 bun --version" }
         out = TextView(this).apply {
@@ -40,12 +41,19 @@ class MainActivity : Activity() {
             setTextIsSelectable(true)
         }
         box.addView(info)
+        box.addView(btnDiag)
         box.addView(btnMagpie)
         box.addView(btnBun)
         box.addView(out)
         root.addView(box)
         setContentView(root)
 
+        btnDiag.setOnClickListener {
+            append("=== 设备诊断 ===\n")
+            append("Android " + android.os.Build.VERSION.RELEASE + " (SDK " + android.os.Build.VERSION.SDK_INT + ") " + android.os.Build.MODEL + "\n")
+            runEngine("libmagpie_exec.so", listOf("--version"))
+            runEngine("libbun_exec.so", listOf("--version"))
+        }
         btnMagpie.setOnClickListener { runEngine("libmagpie_exec.so", listOf("--version")) }
         btnBun.setOnClickListener { runEngine("libbun_exec.so", listOf("--version")) }
     }
