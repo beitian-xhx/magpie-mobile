@@ -8,4 +8,5 @@ p0/bin/
 p0/zip/
 p0/npm/
 p0/source/
+build-tmp/
 *.apk

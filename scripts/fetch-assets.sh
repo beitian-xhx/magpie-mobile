@@ -13,9 +13,12 @@ BUN_URL=https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-aa
 
 fetch() { # fetch <out> <url>
   local out=$1 url=$2
-  curl -fL --retry 2 --connect-timeout 15 --max-time 600 -o "$out" "$url" && return 0
+  # 注意：脚本运行在 set -e 下，命令失败必须先 || true 抑制，
+  # 否则 && 链失败会直接触发 errexit，镜像回退永远不会执行。
+  if curl -fL --retry 2 --connect-timeout 15 --max-time 600 -o "$out" "$url"; then return 0; fi
+  local m
   for m in https://gh-proxy.com/ https://ghproxy.net/; do
-    curl -fL --retry 1 --connect-timeout 15 --max-time 600 -o "$out" "$m$url" && return 0
+    if curl -fL --retry 1 --connect-timeout 15 --max-time 600 -o "$out" "$m$url"; then return 0; fi
   done
   return 1
 }
