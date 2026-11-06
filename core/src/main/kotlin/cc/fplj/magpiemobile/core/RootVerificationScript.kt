@@ -36,10 +36,12 @@ object RootVerificationScript {
     }
 
     private fun extract(json: String, key: String): String? {
-        val marker = "\\"$key\\":\\ ""
-        val start = json.indexOf(marker).takeIf { it >= 0 } ?: return null
-        val valueStart = start + marker.length
-        val end = json.indexOf('"', valueStart).takeIf { it >= 0 } ?: return null
+        // JSON 形状 "key":"…"；用 CHAR 常量避免转义嵌套
+        val q: String = "\""
+        val marker: String = q + key + q + ":" + q
+        val start: Int = json.indexOf(marker).takeIf { it >= 0 } ?: return null
+        val valueStart: Int = start + marker.length
+        val end: Int = json.indexOf(q, valueStart).takeIf { it >= 0 } ?: return null
         return json.substring(valueStart, end)
     }
 
