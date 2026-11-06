@@ -28,7 +28,7 @@ class SseChatParserTest {
         p.feedLine("data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}")
         // 结尾块：只有 finish_reason
         assertFalse(p.feedLine("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}"))
-        assertFalse(p.feedLine("data: [DONE]"))
+        assertTrue(p.feedLine("data: [DONE]")) // [DONE] 终止流
         assertEquals("a", p.fullText())
     }
 
@@ -46,7 +46,7 @@ class SseChatParserTest {
         val seen = mutableListOf<String>()
         val p = SseChatParser { seen.add(it) }
         assertFalse(p.feedLine("data: {\"weird_shape\":123}"))
-        assertFalse(p.feedLine("data: [DONE]"))
+        assertTrue(p.feedLine("data: [DONE]")) // [DONE] 终止流
         assertTrue(seen.isEmpty())
     }
 
