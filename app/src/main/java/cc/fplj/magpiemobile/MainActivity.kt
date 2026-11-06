@@ -26,7 +26,7 @@ class MainActivity : Activity() {
 
         // loopback-only 健康端点：root 验证用（curl 127.0.0.1:3431/healthz），无需读屏
         try {
-            healthServer = HealthServer {
+            healthServer = HealthServer(infoProvider = {
                 mapOf(
                     "app" to "magpie-mobile-poc",
                     "engine" to (engineResults["last"] ?: "not-run"),
@@ -34,7 +34,7 @@ class MainActivity : Activity() {
                     "bun" to (engineResults["bun"] ?: "pending"),
                     "nativeLibraryDir" to (applicationInfo.nativeLibraryDir ?: ""),
                 )
-            }.also { it.start() }
+            }).also { it.start() }
         } catch (_: Exception) {
         }
 
