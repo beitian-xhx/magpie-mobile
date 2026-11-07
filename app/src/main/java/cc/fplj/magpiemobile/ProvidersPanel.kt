@@ -55,6 +55,8 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
     var selected by remember { mutableStateOf(emptyList<String>()) }
     var modelOptions by remember { mutableStateOf(emptyList<ProviderModelSummary>()) }
     var policy by remember { mutableStateOf(ProviderEditorPolicy(true)) }
+    var selectionMutation by remember { mutableStateOf(0) }
+    val selectedModelEdit = remember(policy, selectionMutation, selected) { policy.editedModels() }
     var discoveryLoading by remember { mutableStateOf(false) }
     var discoveryDone by remember { mutableStateOf(false) }
     var discoveryError by remember { mutableStateOf("") }
@@ -159,7 +161,7 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
                 if (initial == null) create = ProviderCreateDraft(inputId, inputName, inputUrl, inputKey, inputModels, allow)
                 else edit = ProviderEditDraft(initial, inputName, inputUrl, inputKey, editedModels, allow)
                 // Validate locally before any network call. A typo does not erase the password field.
-                create?.requestBody(); edit?.requestBody()
+                create?.validate(); edit?.validate()
                 if (!current(session, sequence)) return@launch
                 recoveryRequired = true; pendingProviderId = inputId; submitted = true; key = ""
                 withContext(Dispatchers.IO) {
@@ -244,33 +246,33 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
                 Text(if (discoveryLoading) "正在自动获取模型目录…" else if (discoveryDone) "目录已读取，可直接勾选模型" else "完成地址/密钥填写后自动读取模型，不发送推理", style = MaterialTheme.typography.bodySmall)
                 if (discoveryError.isNotEmpty()) { Text(discoveryError, color = MaterialTheme.colorScheme.error); TextButton(onClick = { focus.clearFocus(); retryCatalog++ }) { Text("重试获取目录") } }
                 Row {
-                    TextButton(enabled = modelOptions.isNotEmpty(), onClick = { selected = policy.chooseAll(); manualText = selected.joinToString("\n") }) { Text("全选") }
-                    TextButton(onClick = { selected = policy.chooseNone(); manualText = "" }) { Text("取消全选") }
+                    TextButton(enabled = modelOptions.isNotEmpty(), onClick = { selected = policy.chooseAll(); selectionMutation++; manualText = selected.joinToString("\n") }) { Text("全选") }
+                    TextButton(onClick = { selected = policy.chooseNone(); selectionMutation++; manualText = "" }) { Text("取消全选") }
                     Text("已选 " + selected.size)
                 }
                 OutlinedTextField(modelSearch, { modelSearch = it }, singleLine = true, label = { Text("搜索模型") }, modifier = Modifier.fillMaxWidth())
                 val options = (modelOptions.map { it.id } + selected).distinct().filter { it.contains(modelSearch,true) }
                 if (options.size > 100) Text("匹配 " + options.size + " 个模型，仅展示前100个；请搜索定位，选择不会丢失")
                 options.take(100).forEach { model -> Row(Modifier.fillMaxWidth()) {
-                    Checkbox(model in selected, enabled = !busy, onCheckedChange = { selected = policy.toggle(model,it); manualText = selected.joinToString("\n") })
+                    Checkbox(model in selected, enabled = !busy, onCheckedChange = { selected = policy.toggle(model,it); selectionMutation++; manualText = selected.joinToString("\n") })
                     val title = modelOptions.firstOrNull { it.id == model }?.name?.ifBlank { model } ?: model
                     Column { Text(title); if (title != model) Text(model, style = MaterialTheme.typography.bodySmall)
                         if (modelOptions.none { it.id == model }) Text("已保存的选择，当前目录未返回；不会自动删除", style = MaterialTheme.typography.bodySmall) }
                 } }
-                if (snapshot != null && policy.editedModels() == null) Text(if (snapshot?.noModels == true) "沿用已禁用模型" else if (snapshot?.modelIds?.isEmpty() == true) "沿用核心全部模型策略（未改选择）" else "保留原有模型选择", style = MaterialTheme.typography.bodySmall)
+                if (snapshot != null && selectedModelEdit == null) Text(if (snapshot?.noModels == true) "沿用已禁用模型" else if (snapshot?.modelIds?.isEmpty() == true) "沿用核心全部模型策略（未改选择）" else "保留原有模型选择", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "收起高级设置" else "高级设置 / 目录失败后手动补充") }
                 if (advanced) {
                     OutlinedTextField(id, { id = it; idTouched = true }, enabled = snapshot == null && !busy, singleLine = true, label = { Text("内部标识（自动生成，已有不能改）") }, modifier = Modifier.fillMaxWidth())
                     Row { Checkbox(localHttp, enabled = !busy, onCheckedChange = { localHttp = it }); Text("明确允许本机HTTP（外部仍须HTTPS）") }
                     Row { Checkbox(manual, enabled = !busy, onCheckedChange = { manual = it }); Text("手动补充模型ID（仅备选）") }
-                    if (manual) OutlinedTextField(manualText, { manualText = it; selected = policy.manual(it.split(',', '\n').map(String::trim).filter(String::isNotEmpty)) }, label = { Text("已确认可用的模型ID，每行一个") }, modifier = Modifier.fillMaxWidth())
+                    if (manual) OutlinedTextField(manualText, { manualText = it; selected = policy.manual(it.split(',', '\n').map(String::trim).filter(String::isNotEmpty)); selectionMutation++ }, label = { Text("已确认可用的模型ID，每行一个") }, modifier = Modifier.fillMaxWidth())
                 }
                 if (message.isNotEmpty()) Text(message, color = MaterialTheme.colorScheme.error)
                 Text("保存只更新配置，不验证推理。密钥不写日志；结果未知时先核对而不重发。", style = MaterialTheme.typography.bodySmall)
             }
             Button(modifier = Modifier.fillMaxWidth(), enabled = enabled && !operationBusy && !busy && listHealthy && !recoveryRequired && normalized.isNotEmpty() && !newOriginNeedsKey && !discoveryLoading &&
-                (snapshot != null || key.isNotBlank()) && (selected.isNotEmpty() || policy.editedModels()?.isEmpty() == true || (snapshot != null && policy.editedModels() == null)) && (snapshot != null || discoveryDone || manual),
-                onClick = { focus.clearFocus(); if (selected.isEmpty() && policy.editedModels()?.isEmpty() == true) confirmDisable = true else submit() }) { Text(if (busy) "保存中…" else "保存") }
+                (snapshot != null || key.isNotBlank()) && (selected.isNotEmpty() || selectedModelEdit?.isEmpty() == true || (snapshot != null && selectedModelEdit == null)) && (snapshot != null || discoveryDone || manual),
+                onClick = { focus.clearFocus(); if (selected.isEmpty() && selectedModelEdit?.isEmpty() == true) confirmDisable = true else submit() }) { Text(if (busy) "保存中…" else "保存") }
         } }
     }
     if (confirmDisable) AlertDialog(onDismissRequest = { confirmDisable = false }, title = { Text("禁用全部模型？") }, text = { Text("此操作会明确禁用该提供商的全部模型，不是获取目录失败。") },

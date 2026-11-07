@@ -29,6 +29,9 @@ class ProviderCreateDraft(
     private var submitted = false
     val chat: String get() = chatUrl
 
+    /** Validate without exposing JSON implementation types to the Android UI module. */
+    fun validate() { requestBody() }
+
     fun requestBody(): JsonObject {
         val key = providerApiKey(secret, allowBlank = false)
         return buildJsonObject {
@@ -69,6 +72,9 @@ class ProviderEditDraft(
     private val changedModels = modelIds?.let { providerModelIds(it) }
     private var secret = apiKey
     private var submitted = false
+
+    /** Validate without exposing JSON implementation types to the Android UI module. */
+    fun validate() { requestBody() }
 
     fun requestBody(): JsonObject {
         if (!validProviderExistingId(snapshot.id) || !validProviderRevision(snapshot.revision)) {
