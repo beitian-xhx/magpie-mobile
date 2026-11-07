@@ -33,6 +33,7 @@ class ProviderCreateDraft(
     fun validate() { requestBody() }
 
     fun requestBody(): JsonObject {
+        check(!submitted) { "新增请求已提交；请重新只读核对提供商列表" }
         val key = providerApiKey(secret, allowBlank = false)
         return buildJsonObject {
             put("new", true); put("id", id); put("name", name); put("chat", chatUrl); put("key", key)
@@ -77,6 +78,7 @@ class ProviderEditDraft(
     fun validate() { requestBody() }
 
     fun requestBody(): JsonObject {
+        if (submitted) throw ProviderEditPreconditionException()
         if (!validProviderExistingId(snapshot.id) || !validProviderRevision(snapshot.revision)) {
             throw ProviderEditPreconditionException()
         }
