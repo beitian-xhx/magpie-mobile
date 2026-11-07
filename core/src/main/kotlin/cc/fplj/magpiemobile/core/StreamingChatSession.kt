@@ -37,16 +37,18 @@ class StreamingChatSession(
         history.add(ChatClient.Message("user", text))
         try {
             var full: String
+            var reply: String
             var engine = engineId(model, true)
             try {
-                // 流式优先
+                // 流式优先：fullText 已是拼好的纯文本，不再过 extractReply
                 full = streaming.stream(model, history.toList(), onDelta)
+                reply = full
             } catch (e: ChatException) {
                 // 降级非流式（记录降级标记；错误仍上抛由 UI 呈现）
                 engine = engineId(model, false)
                 full = fallback.complete(model, history.toList())
+                reply = ChatSession.extractReply(full)
             }
-            val reply = ChatSession.extractReply(full)
             history.add(ChatClient.Message("assistant", reply))
             store.append(SessionRecord(now(), "assistant", engine, reply))
             return reply
