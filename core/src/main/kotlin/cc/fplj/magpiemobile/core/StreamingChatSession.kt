@@ -36,7 +36,7 @@ class StreamingChatSession(
         store.append(SessionRecord(now(), "user", engineId(model, false), text))
         history.add(ChatClient.Message("user", text))
         try {
-            val full: String
+            var full: String
             var engine = engineId(model, true)
             try {
                 // 流式优先
