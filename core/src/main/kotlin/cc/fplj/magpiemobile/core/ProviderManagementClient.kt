@@ -48,6 +48,7 @@ class ProviderManagementClient(
         var writeAttempted = false
         try {
             if (observedFileError) throw ProviderConfigurationUnreadableException()
+            draft.validate() // state/replay before pure preview and non-writing capability requests
             require(draft.requestBody().toString().toByteArray(Charsets.UTF_8).size <= MAX_REQUEST_BYTES) { "提供商请求超过安全上限" }
             ensureProviderCapabilities()
             val requestBody = draft.submissionBody() // consume only after non-writing validation
@@ -63,6 +64,7 @@ class ProviderManagementClient(
         var writeAttempted = false
         try {
             if (observedFileError) throw ProviderConfigurationUnreadableException()
+            draft.validate() // state/replay before pure preview and non-writing capability requests
             require(draft.requestBody().toString().toByteArray(Charsets.UTF_8).size <= MAX_REQUEST_BYTES) { "提供商请求超过安全上限" }
             ensureProviderCapabilities()
             val requestBody = draft.submissionBody()

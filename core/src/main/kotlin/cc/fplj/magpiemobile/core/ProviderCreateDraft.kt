@@ -30,10 +30,13 @@ class ProviderCreateDraft(
     val chat: String get() = chatUrl
 
     /** Validate without exposing JSON implementation types to the Android UI module. */
-    fun validate() { requestBody() }
+    @Synchronized
+    fun validate() {
+        check(!submitted) { "新增请求已提交；请重新只读核对提供商列表" }
+        requestBody()
+    }
 
     fun requestBody(): JsonObject {
-        check(!submitted) { "新增请求已提交；请重新只读核对提供商列表" }
         val key = providerApiKey(secret, allowBlank = false)
         return buildJsonObject {
             put("new", true); put("id", id); put("name", name); put("chat", chatUrl); put("key", key)
@@ -75,10 +78,13 @@ class ProviderEditDraft(
     private var submitted = false
 
     /** Validate without exposing JSON implementation types to the Android UI module. */
-    fun validate() { requestBody() }
+    @Synchronized
+    fun validate() {
+        if (submitted) throw ProviderEditPreconditionException()
+        requestBody()
+    }
 
     fun requestBody(): JsonObject {
-        if (submitted) throw ProviderEditPreconditionException()
         if (!validProviderExistingId(snapshot.id) || !validProviderRevision(snapshot.revision)) {
             throw ProviderEditPreconditionException()
         }
