@@ -15,7 +15,7 @@ python3 scripts/apply-mobile-core.py --source-root /path/to/pinned-magpie
 - --source-root 必填：固定 Magpie Git checkout 或源码归档根目录。
 - --patch-root 可选：受信任补丁包根目录，默认本仓库 patches/mobile；不是不受信任外部补丁入口。
 - --check：只核对，不写入，不下载依赖，不执行 Go 或构建工具。
-- Git checkout 核对 HEAD；归档不能证明整个 commit，只通过 go.mod、六个目标文件的 SHA256 固定相关源码。
+- Git checkout 核对 HEAD；归档不能证明整个 commit，只通过 go.mod、七个目标文件的 SHA256 固定相关源码。
 - 原文件 hash、每条 old 文字唯一匹配、结果 hash、overlay 完整清单/hash 全部先通过才写入。拒绝偏移、模糊匹配、重复应用和混合状态。
 - 每个文件原子替换；I/O 失败回滚已完成的文件。源码目录必须为独占工作树，不支持并发写入或文件系统突然换挂载；失败后重新检查，不自动套另一通道。
 
@@ -27,6 +27,8 @@ python3 scripts/apply-mobile-core.py --source-root /path/to/pinned-magpie
 - M3：StartWeb 在创建 key、listener 和 backend 前拒绝非 literal-loopback 地址。允许 127.0.0.0/8 与 ::1；拒绝 localhost 等 DNS 名称（App 使用 127.0.0.1）。网关的 LAN 监听未在本补丁禁用，但任何来源仍必须有效 gateway key。
 - 原生 updater.start 在 mobile 第一条业务语句前 return，不 place、不注册 restarter、不启动 goroutine；StartWeb 也不调用它。APK 自身更新归 App 管理。
 - App 必须注入 MAGPIE_WEB_KEY，通过原 CheckWebKey（至少 16 字符，ASCII 字母/数字/-._~）。mobile 读取后 Unsetenv，同时清除 reexec key，不随机生成替代管理凭据；w.Link 不包含 key。无新匿名 bootstrap。Cookie 沿原 webGuard，mobile 使用进程会话 cookie。
+
+CLI 运行时兼容：mobile 的 printWeb 在旧桌面输出之前，仅打印 w.Addr 和 App 私有鉴权说明，然后 return；不读取 w.Link、不切片 /?k=、不输出 key/proxy/network link，也不保留“link carries key”提示。非 mobile 继续原函数体。新增 CLI 移动回归覆盖 keyless Link 不 panic 及 key-bearing Link 不泄密；这些 Go 回归由 Actions 执行，不能仅用编译替代运行验证。现有49个缓存Go文件扫描只发现 printWeb 同一切片的两个源码副本，没有其他 Index/Link 消费点；该扫描不冒充完整上游仓库审计。
 
 ## 管理 API（原 webGuard 与 webOwnPage/CORS 保持）
 
@@ -59,7 +61,7 @@ copy-key 是共享 task-1 revision 3 确认的新增恢复白名单；客户端�
 建议 Actions 在独占固定 checkout 应用后执行（由 Lead 维护 CI）：
 
 ```sh
-go test -tags nogui,mobile ./internal/gateway ./internal/gui -run '^TestMobile' -count=1
+go test -tags nogui,mobile ./internal/gateway ./internal/gui ./internal/cli -run '^TestMobile' -count=1
 GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -buildmode=pie -tags nogui,mobile -o magpie-android-arm64 .
 ```
 

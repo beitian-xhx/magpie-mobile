@@ -202,12 +202,29 @@ class ApplyMobileCoreTests(unittest.TestCase):
                 patcher.apply(changes)
         self.unchanged()
 
+    def test_mobile_cli_print_branch_is_keyless_and_before_desktop_slice(self):
+        root = patcher.DEFAULT_PATCH_ROOT
+        manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+        cli = next(p for p in manifest["patches"] if p["path"] == "internal/cli/web_cli.go")
+        branch = next(r for r in cli["replacements"] if r["old"] == "func printWeb(w *gui.Web) {\n")
+        self.assertIn("if mobilepolicy.Enabled", branch["new"])
+        self.assertIn("w.Addr", branch["new"])
+        self.assertIn("App-managed credentials", branch["new"])
+        self.assertIn("return", branch["new"])
+        for unsafe in ("w.Link", "strings.Index", "proxyLink(", "NetworkLinks(", "the link carries"):
+            self.assertNotIn(unsafe, branch["new"])
+        self.assertRegex(cli["resultSha256"], "^[0-9a-f]{64}$")
+        tests = (root / "overlay/internal/cli/mobile_policy_test.go").read_text(encoding="utf-8")
+        self.assertTrue(tests.startswith("//go:build mobile\n"))
+        self.assertIn("func TestMobilePrintWebNoKeyDoesNotPanic", tests)
+        self.assertIn("func TestMobilePrintWebDoesNotOutputCredentials", tests)
+
     def test_real_package_inventory_and_policy_guards(self):
         root = patcher.DEFAULT_PATCH_ROOT
         manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["sourceRevision"], patcher.SOURCE_REVISION)
         self.assertEqual(manifest["goVersion"], "1.26.8")
-        self.assertEqual(len(manifest["patches"]), 6)
+        self.assertEqual(len(manifest["patches"]), 7)
         for overlay in manifest["overlays"]:
             data = (root / "overlay" / overlay["path"]).read_bytes()
             patcher.require_hash(data, overlay["sha256"], overlay["path"])
@@ -220,7 +237,7 @@ class ApplyMobileCoreTests(unittest.TestCase):
         for exception in ("ownCallback", "corsPreflight", "keyPageOpen", "imageTokenAsked", "oidcExchange", "proveAsked"):
             self.assertRegex(inserts, "!mobilepolicy.Enabled.*" + exception)
         tests = [(root / "overlay" / o["path"]).read_text() for o in manifest["overlays"] if o["path"].endswith("_test.go")]
-        self.assertEqual(len(tests), 2)
+        self.assertEqual(len(tests), 3)
         self.assertTrue(all(t.startswith("//go:build mobile\n") for t in tests))
         self.assertGreaterEqual(sum(t.count("func TestMobile") for t in tests), 10)
 

@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Host-only core integration: no provider secret, subscription or model inference."""
+import argparse,json,os,secrets,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error
+from pathlib import Path
+
+def port():
+    with socket.socket() as s:
+        s.bind(('127.0.0.1',0)); return s.getsockname()[1]
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self,*args,**kwargs): return None
+
+http=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
+def request(base,path,method='GET',body=None,headers=None):
+    data=None if body is None else json.dumps(body).encode()
+    h={'Accept':'application/json'};h.update(headers or {})
+    if data is not None: h['Content-Type']='application/json'
+    req=urllib.request.Request(base+path,data=data,headers=h,method=method)
+    try:
+        with http.open(req,timeout=1) as r: return r.status,r.read(65537)
+    except urllib.error.HTTPError as e: return e.code,e.read(65537)
+
+def is_listening(p):
+    try:
+        with socket.create_connection(('127.0.0.1',p),timeout=.2): return True
+    except OSError: return False
+
+args=argparse.ArgumentParser();args.add_argument('--exe',required=True);opts=args.parse_args()
+exe=Path(opts.exe).resolve();assert exe.is_file()
+with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
+    root=Path(temporary)
+    for directory in ['config','cache','tmp']: (root/directory).mkdir()
+    admin_port,gateway_port=port(),port()
+    while admin_port==gateway_port: gateway_port=port()
+    admin_key=secrets.token_hex(32)
+    env={'PATH':os.environ['PATH'],'HOME':str(root),'XDG_CONFIG_HOME':str(root/'config'),
+         'XDG_CACHE_HOME':str(root/'cache'),'TMPDIR':str(root/'tmp'),
+         'MAGPIE_WEB_KEY':admin_key,'MAGPIE_ADDR':'127.0.0.1:'+str(gateway_port),
+         'MAGPIE_BUN':'/usr/bin/false','HTTP_PROXY':'http://127.0.0.1:9',
+         'HTTPS_PROXY':'http://127.0.0.1:9','NO_PROXY':'127.0.0.1,localhost'}
+    p=subprocess.Popen([str(exe),'serve','--web=127.0.0.1:'+str(admin_port)],env=env,
+                       cwd=root,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    tail=[]
+    def drain():
+        for line in iter(p.stdout.readline,b''):
+            tail.append(line.decode(errors='replace'));tail[:]=tail[-30:]
+    t=threading.Thread(target=drain,daemon=True);t.start()
+    admin='http://127.0.0.1:'+str(admin_port);gateway='http://127.0.0.1:'+str(gateway_port)
+    cookie={'Cookie':'magpie_web_'+str(admin_port)+'='+admin_key}
+    passed=False
+    try:
+        deadline=time.monotonic()+15
+        while time.monotonic()<deadline:
+            if p.poll() is not None: raise AssertionError('core exited during startup with code '+str(p.returncode))
+            try:
+                code,body=request(admin,'/api/mobile/capabilities',headers=cookie)
+                if code==200: break
+            except (OSError,urllib.error.URLError): pass
+            time.sleep(.1)
+        else: raise AssertionError('authenticated management never became ready')
+        cap=json.loads(body)
+        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3188-mobile.1','mobile':True,
+                     'loopbackKeys':True,'debugEndpoints':False,'adminLoopbackOnly':True,'nativeAutoUpdate':False}
+        assert request(admin,'/api/mobile/capabilities')[0]==401
+        assert request(gateway,'/api/hello')[0]==401
+        assert request(gateway,'/v1/models',headers={'Authorization':'Bearer magpie'})[0]==401
+        before_code,before_body=request(admin,'/api/caller-keys',headers=cookie)
+        assert before_code==200
+        before_ids={key['id'] for key in json.loads(before_body)['keys']}
+        code,body=request(admin,'/api/caller-keys/add-key','POST',{'name':'mobile-smoke-key'},cookie)
+        assert code==200
+        created=json.loads(body);secret=created['secret']
+        assert secret.startswith('sk-magpie-key-') and len(secret.removeprefix('sk-magpie-key-'))==48
+        own=[key for key in created['keys'] if key['name']=='mobile-smoke-key' and key['id'] not in before_ids]
+        assert len(own)==1 and all('secret' not in key for key in created['keys'])
+        own_id=own[0]['id']
+        auth={'Authorization':'Bearer '+secret}
+        code,body=request(gateway,'/api/hello',headers=auth)
+        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3188-mobile.1'}
+        assert request(gateway,'/v1/magpie/goroutines',headers=auth)[0]==404
+        assert request(gateway,'/v1/magpie/heap',headers=auth)[0]==404
+        assert request(admin,'/api/window/restart','POST',{},cookie)[0]==404
+        code,body=request(admin,'/api/caller-keys',headers=cookie)
+        listed=json.loads(body)['keys'];assert code==200 and all('secret' not in key for key in listed)
+        assert len([key for key in listed if key['id']==own_id])==1
+        code,body=request(admin,'/api/caller-keys/copy-key','POST',{'key':own_id},cookie)
+        assert code==200 and json.loads(body)['secret']==secret
+        time.sleep(.3)
+        assert p.poll() is None,'core must survive the CLI printWeb path'
+        assert admin_key not in ''.join(tail) and secret not in ''.join(tail),'credential leaked to startup output'
+        p.terminate();p.wait(timeout=5);t.join(timeout=1)
+        assert not is_listening(admin_port) and not is_listening(gateway_port),'orphan listener after stop'
+        passed=True
+        print('PASS: host serve startup, strict key/cookie auth, core-issued key/copy, debug denial, safe CLI output and stop; no inference')
+    finally:
+        if p.poll() is None:
+            p.kill();p.wait(timeout=5)
+        if not passed:
+            # Do not print raw startup output or response bodies which may contain credentials.
+            print('Host smoke failed; diagnostics withheld to keep all credentials out of CI logs')

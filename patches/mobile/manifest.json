@@ -150,9 +150,28 @@
         }
       ],
       "resultSha256": "7524072197511a1c802c18bc50d0858843f99a67e649d8bb24eb6c1dafbf5b9c"
+    },
+    {
+      "path": "internal/cli/web_cli.go",
+      "sha256": "de3f594690f59e31abdc8df595135ddb013f3d9ae8765562da3e60a24c6ccf7c",
+      "replacements": [
+        {
+          "old": "\t\"github.com/yetone/magpie/internal/gui\"\n",
+          "new": "\t\"github.com/yetone/magpie/internal/gui\"\n\t\"github.com/yetone/magpie/internal/mobilepolicy\"\n"
+        },
+        {
+          "old": "func printWeb(w *gui.Web) {\n",
+          "new": "func printWeb(w *gui.Web) {\n\tif mobilepolicy.Enabled {\n\t\tfmt.Println(\"magpie mobile private management on\", w.Addr)\n\t\tfmt.Println(\"  App-managed credentials only; no key-bearing link is printed. Gateway requests require a valid key.\")\n\t\treturn\n\t}\n"
+        }
+      ],
+      "resultSha256": "ea9c40898e94e3ccaee9ca51a412fd3d1404e00dc4a2502183d01453b9dbaa86"
     }
   ],
   "overlays": [
+    {
+      "path": "internal/cli/mobile_policy_test.go",
+      "sha256": "15b48993c5aa55ac295b4a48c12827554f0d8a9c8d72a9c3ce21f97d9ce9076f"
+    },
     {
       "path": "internal/gateway/mobile_identity.go",
       "sha256": "42e1e00fd73fcd3e8b20a8f0ce7df1296063fee61079e8dd1a64211f5e4de9fd"
@@ -162,12 +181,12 @@
       "sha256": "52b851547bcf392cc7466fcf3f6831830b0e76c78aeeaaf5604e250bcb7cd8ae"
     },
     {
-      "path": "internal/gui/mobile_policy.go",
-      "sha256": "fb64e1ab28650f753c2db8f642a11471251bc49591def85bbb221355360bfd89"
-    },
-    {
       "path": "internal/gui/mobile_policy_test.go",
       "sha256": "2727c450a5dd061ddba47df57d43ebb7d91baa235746cc30f70f8cf9a48c36be"
+    },
+    {
+      "path": "internal/gui/mobile_policy.go",
+      "sha256": "fb64e1ab28650f753c2db8f642a11471251bc49591def85bbb221355360bfd89"
     },
     {
       "path": "internal/mobilepolicy/enabled_desktop.go",

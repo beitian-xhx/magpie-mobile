@@ -74,7 +74,16 @@ jobs:
         run: |
           set -euo pipefail
           go test -tags nogui ./internal/access -count=1 -timeout=3m
-          go test -json -tags nogui,mobile ./internal/gateway ./internal/gui -run '^TestMobile' -count=1 -timeout=3m | tee ../mobile-go-tests.jsonl
+          go test -json -tags nogui,mobile ./internal/gateway ./internal/gui ./internal/cli -run '^TestMobile' -count=1 -timeout=3m | tee ../mobile-go-tests.jsonl
+
+      - name: Host integration smoke without model inference
+        working-directory: build-tmp/upstream
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          go build -trimpath -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.1' -o ../magpie-mobile-host .
+          python3 ../../scripts/smoke-mobile-core.py --exe ../magpie-mobile-host
 
       - name: Build the Android ARM64 mobile core
         working-directory: build-tmp/upstream
