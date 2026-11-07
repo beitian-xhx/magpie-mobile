@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
             cacheDir,
         )
         ChatSessionHolder.chatFilePath = File(filesDir, "chat.jsonl").absolutePath
+        GatewayKeyHolder.currentKeyCached = GatewayKeyHolder.currentKey(filesDir)
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -131,7 +132,7 @@ fun Dashboard(
                 Button(onClick = {
                     scope.launch {
                         try {
-                            val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKey)
+                            val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
                             val models = withContext(Dispatchers.IO) { ModelsClient(cfg).list() }
                             modelIds = models.map { it.id }
                             if (selectedModel.isBlank() && modelIds.isNotEmpty()) {
@@ -172,7 +173,7 @@ fun Dashboard(
                         chatInput = ""
                         scope.launch {
                             try {
-                                val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKey)
+                                val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
                                 val session = ChatSessionHolder.get(cfg)
                                 chatOut = ""
                                 val reply = withContext(Dispatchers.IO) {
@@ -240,7 +241,31 @@ object EngineSupervisorHolder {
 }
 
 object GatewayKeyHolder {
-    val currentKey: String = cc.fplj.magpiemobile.core.GatewayKeyGenerator.generate()
+    /**
+     * 网关客户端 key，持久化到 App 私有文件（FBE 保护）——重启后保持稳定，
+     * 引擎侧用同一 key 校验。文件权限 0600 语义（App 私有目录默认）。
+     * P2 联调时此 key 需同步注册到核心（gateway-key add），当前为本地占位。
+     */
+    @Volatile private var cached: String? = null
+
+    fun currentKey(filesDir: File): String {
+        cached?.let { return it }
+        val f = File(filesDir, "gateway-key.txt")
+        val key = if (f.exists() && f.length() > 0) {
+            f.readText().trim().also {
+                require(cc.fplj.magpiemobile.core.GatewayKeyGenerator.looksValid(it)) { "持久化 key 格式损坏" }
+            }
+        } else {
+            cc.fplj.magpiemobile.core.GatewayKeyGenerator.generate().also {
+                f.writeText(it)
+            }
+        }
+        cached = key
+        return key
+    }
+
+    /** onCreate 先调用；Composable 内直接读此属性。 */
+    @Volatile var currentKeyCached: String = ""
 }
 
 object ChatSessionHolder {
