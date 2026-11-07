@@ -79,11 +79,6 @@ class MainActivity : ComponentActivity() {
         val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
         ChatSessionHolder.chatFilePath = File(filesDir, "chat.jsonl").absolutePath
         try {
-            GatewayKeyHolder.currentKeyCached = GatewayKeyHolder.currentKey(filesDir)
-        } catch (e: Exception) {
-            GatewayRuntime.requestFailed(e) // corrupt credentials must not crash the entire Activity
-        }
-        try {
             healthServer = HealthServer(infoProvider = {
                 val status = GatewayRuntime.status.value
                 mapOf("app" to "magpie-mobile", "version" to BuildConfig.VERSION_NAME,
@@ -99,6 +94,7 @@ class MainActivity : ComponentActivity() {
                         layout = layout,
                         notificationNotice = notificationNotice,
                         onAllowNotifications = ::allowNotifications,
+                        onRetryCoreConnection = { NativeCoreSession.retry(filesDir) },
                         onStartGateway = {
                             GatewayRuntime.requestStart()
                             try {
@@ -129,14 +125,17 @@ fun Dashboard(
     layout: EnginePaths.Layout,
     notificationNotice: String,
     onAllowNotifications: () -> Unit,
+    onRetryCoreConnection: () -> Unit,
     onStartGateway: () -> Unit,
     onStopGateway: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val gateway by GatewayRuntime.status.collectAsStateWithLifecycle()
+    val coreSession by NativeCoreSession.status.collectAsStateWithLifecycle()
     val active = gateway.phase in setOf(GatewayEngineController.Phase.STARTING,
         GatewayEngineController.Phase.RUNNING, GatewayEngineController.Phase.BACKOFF)
     val running = gateway.phase == GatewayEngineController.Phase.RUNNING
+    val clientReady = running && coreSession.ready
     var log by remember { mutableStateOf("") }
     var modelsText by remember { mutableStateOf("（未加载）") }
     var modelIds by remember { mutableStateOf(emptyList<String>()) }
@@ -176,12 +175,22 @@ fun Dashboard(
         }
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("核心安全连接", style = MaterialTheme.typography.titleSmall)
+                Text(coreSession.message, style = MaterialTheme.typography.bodySmall)
+                if (running && !coreSession.ready && coreSession.phase != NativeCoreSession.Phase.CONNECTING) {
+                    Button(onClick = onRetryCoreConnection) { Text("重新核对连接与核心密钥") }
+                }
+                Text("管理凭据仅留在进程内；客户端密钥由核心签发并私有保存。连接成功不代表已配置 API 渠道。", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("模型目录", style = MaterialTheme.typography.titleSmall)
-                Button(enabled = running && !loadingModels && !sending, onClick = {
+                Button(enabled = clientReady && !loadingModels && !sending, onClick = {
                     loadingModels = true
                     scope.launch {
                         try {
-                            val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
+                            val cfg = NativeCoreSession.gatewayConfig()
                             val models = withContext(Dispatchers.IO) { ModelsClient(cfg).list() }
                             modelIds = models.map { it.id }
                             if (selectedModel !in modelIds) selectedModel = modelIds.firstOrNull().orEmpty()
@@ -191,7 +200,7 @@ fun Dashboard(
                         finally { loadingModels = false }
                     }
                 }) { Text(if (loadingModels) "读取中…" else "刷新模型列表") }
-                Text(if (running) modelsText else "请先启动网关；端口就绪不代表已配置渠道和核心密钥", style = MaterialTheme.typography.bodySmall)
+                Text(if (clientReady) modelsText else "请先完成核心安全连接；端口就绪不代表已配置渠道和核心密钥", style = MaterialTheme.typography.bodySmall)
             }
         }
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -207,7 +216,7 @@ fun Dashboard(
                 }
                 OutlinedTextField(value = chatInput, onValueChange = { chatInput = it }, enabled = !sending,
                     modifier = Modifier.fillMaxWidth(), placeholder = { Text("输入消息…") })
-                Button(enabled = running && !sending && chatInput.isNotBlank() && selectedModel in modelIds, onClick = {
+                Button(enabled = clientReady && !sending && chatInput.isNotBlank() && selectedModel in modelIds, onClick = {
                     val text = chatInput
                     val model = selectedModel
                     sending = true
@@ -217,7 +226,7 @@ fun Dashboard(
                         val deltas = Channel<String>(Channel.UNLIMITED)
                         val render = launch { for (delta in deltas) chatOut += delta }
                         try {
-                            val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
+                            val cfg = NativeCoreSession.gatewayConfig()
                             val session = ChatSessionHolder.get(cfg)
                             val reply = withContext(Dispatchers.IO) { session.send(text, model) { delta -> deltas.trySend(delta) } }
                             deltas.close(); render.join() // flush all deltas before final text; no delayed Handler replay
@@ -260,24 +269,6 @@ fun Dashboard(
                 if (log.isNotEmpty()) Text(log, style = MaterialTheme.typography.bodySmall)
             }
         }
-    }
-}
-
-/** Local client credential only: persistence does not register it with the upstream engine. */
-object GatewayKeyHolder {
-    @Volatile private var cached: String? = null
-    @Volatile var currentKeyCached: String = ""
-    @Synchronized
-    fun currentKey(filesDir: File): String {
-        cached?.let { return it }
-        val file = File(filesDir, "gateway-key.txt")
-        val key = if (file.exists() && file.length() > 0) {
-            file.readText().trim().also {
-                require(cc.fplj.magpiemobile.core.GatewayKeyGenerator.looksValid(it)) { "本地网关密钥文件格式损坏，请勿将它当成已注册的核心密钥" }
-            }
-        } else cc.fplj.magpiemobile.core.GatewayKeyGenerator.generate().also { file.writeText(it) }
-        cached = key
-        return key
     }
 }
 

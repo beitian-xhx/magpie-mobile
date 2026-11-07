@@ -1,30 +1,35 @@
 package cc.fplj.magpiemobile.core
 
-/**
- * 管理凭据的进程内持有模型（plan.md §4.3 的可测试核心）。
- *
- * 约束：管理 cookie 只在本类实例内存中；redacted() 返回安全展示形状，
- * toString 永不泄漏完整值——测试钉死「意外序列化也不泄漏」。
- */
+/** A process-only MAGPIE_WEB_KEY. Never use this credential on the gateway. */
 class ManagerCredential private constructor(
-    private val cookieName: String,
+    val cookieName: String,
     private val cookieValue: String,
+    val port: Int,
 ) {
+    /** Explicit native requests use the correct cookie directly; no sign-in redirect is needed. */
     fun cookieHeader(): String = "$cookieName=$cookieValue"
 
-    /** 日志/展示用的安全形状：只露前 4 位。 */
+    /** Compatibility display: never exposes the complete key. */
     fun redacted(): String = cookieName + "=" + cookieValue.take(4) + "…"
-
     override fun toString(): String = redacted()
 
     companion object {
-        private val ALLOWED_NAMES = setOf("magpie_web_3430", "magpie_web_3425")
+        fun fromKey(key: String, port: Int = 3430): ManagerCredential {
+            require(port in 1..65535) { "管理端口无效" }
+            require(key.length in 16..4096) { "管理 key 长度无效" }
+            require(key.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it in "-._~" }) {
+                "管理 key 含非法字符"
+            }
+            return ManagerCredential("magpie_web_$port", key, port)
+        }
 
+        /** Kept for existing callers/tests; the name must have a canonical, valid port. */
         fun create(cookieName: String, cookieValue: String): ManagerCredential {
-            require(cookieName in ALLOWED_NAMES) { "未知管理 cookie 名：$cookieName（白名单外拒绝）" }
-            require(cookieValue.length >= 16) { "管理 key 至少 16 字符（上游 CheckWebKey 语义）" }
-            require(cookieValue.all { it.isLetterOrDigit() || it in "-._~" }) { "管理 key 含非法字符" }
-            return ManagerCredential(cookieName, cookieValue)
+            val suffix = cookieName.removePrefix("magpie_web_")
+            val port = suffix.toIntOrNull()
+            require(cookieName.startsWith("magpie_web_") && port != null &&
+                port in 1..65535 && suffix == port.toString()) { "管理 cookie 名无效" }
+            return fromKey(cookieValue, port)
         }
     }
 }

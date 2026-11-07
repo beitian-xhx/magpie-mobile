@@ -2,51 +2,36 @@ package cc.fplj.magpiemobile.core
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Duration
 
-/**
- * Magpie 核心（loopback 管理 API）的 Kotlin 客户端。
- *
- * 契约基线：Magpie v0.1.3188 / commit 54dc257f（internal/gui/api.go）。
- * 上游无稳定 OpenAPI：字段解析一律宽松（忽略未知字段），仅在
- * [hello] 这类被官方文档明确钉住的形状上做强校验。
+/** Gateway probe only (fixed upstream 54dc257f): /api/hello JSON lives on gateway 3425,
+ * not GUI 3430. New management code must use [CoreManagementClient]. State is a GUI
+ * management operation, not an unauthenticated gateway probe, and needs explicit cookie.
  */
 class CoreClient(
-    private val baseUrl: String = "http://127.0.0.1:3430",
+    baseUrl: String = "http://127.0.0.1:3425",
     private val timeout: Duration = Duration.ofSeconds(5),
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val transport = BoundedCoreHttp(LoopbackEndpoint(baseUrl), timeout)
 
-    /** GET /api/hello —— 官方文档钉住的探测端点，返回 {"name":"magpie","version":"…"} */
+    /** No manager credential is stored or sent by this gateway probe. */
     fun hello(): Hello {
-        val body = get("api/hello")
-        return json.decodeFromString(Hello.serializer(), body)
-    }
-
-    /** GET /api/state —— 管理页主状态。上游字段未完全钉住，返回原始 JsonObject 由上层按需读取。 */
-    fun state(): JsonObject = json.parseToJsonElement(get("api/state")).jsonObject
-
-    private fun get(path: String): String {
-        val conn = URL("$baseUrl/$path").openConnection() as HttpURLConnection
-        conn.connectTimeout = timeout.toMillis().toInt()
-        conn.readTimeout = timeout.toMillis().toInt()
-        try {
-            val code = conn.responseCode
-            if (code != 200) throw CoreException("GET /$path -> HTTP $code")
-            return conn.inputStream.bufferedReader().readText()
-        } finally {
-            conn.disconnect()
+        val body = try { transport.request("GET", "/api/hello") } catch (e: ManagementException) {
+            throw CoreException(e.message ?: "核心探测失败")
+        }
+        return try { json.decodeFromString(Hello.serializer(), body) } catch (_: Exception) {
+            throw CoreException("核心探测响应格式无效")
         }
     }
+
+    @Deprecated("State belongs to authenticated GUI management; use CoreManagementClient.state")
+    fun state(
+        credential: ManagerCredential,
+        managementBaseUrl: String = "http://127.0.0.1:" + credential.port,
+    ): JsonObject = CoreManagementClient(credential, managementBaseUrl, timeout).state()
 }
 
 @kotlinx.serialization.Serializable
-data class Hello(
-    val name: String,
-    val version: String,
-)
-
+data class Hello(val name: String, val version: String)
 class CoreException(message: String) : RuntimeException(message)

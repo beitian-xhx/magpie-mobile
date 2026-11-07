@@ -26,10 +26,13 @@ class GatewayService : Service() {
     private var owner = 0L
     @Volatile private var foregroundReady = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val adminKey = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
+        .joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
 
     override fun onCreate() {
         super.onCreate()
         owner = GatewayRuntime.attach()
+        NativeCoreSession.attach(owner, adminKey)
         try {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Magpie 网关", NotificationManager.IMPORTANCE_LOW),
@@ -62,7 +65,10 @@ class GatewayService : Service() {
         controller = GatewayEngineController(
             launch = {
                 val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
-                val environment = EngineEnvironment.prepare(layout)
+                val engineEnvironment = EngineEnvironment.prepare(layout) + mapOf(
+                    "MAGPIE_WEB_KEY" to adminKey,
+                    "MAGPIE_ADDR" to "127.0.0.1:3425",
+                )
                 for (exe in listOf(EnginePaths.magpieExecutable(layout), EnginePaths.bunExecutable(layout))) {
                     val verdict = PayloadVerifier.verify(exe)
                     check(verdict !is PayloadVerifier.Verdict.Fail) {
@@ -75,7 +81,7 @@ class GatewayService : Service() {
                 ProcessBuilder(EngineCommand.serve(EnginePaths.magpieExecutable(layout).absolutePath))
                     .directory(layout.homeDir)
                     .redirectErrorStream(true)
-                    .apply { environment().apply { clear(); putAll(environment) } }
+                    .apply { environment().apply { clear(); putAll(engineEnvironment) } }
                     .start()
             },
             ready = { listening(EngineCommand.DEFAULT_GATEWAY_PORT) && listening(EngineCommand.DEFAULT_ADMIN_PORT) },
@@ -88,6 +94,11 @@ class GatewayService : Service() {
         GatewayRuntime.publish(owner, status)
         if (!GatewayRuntime.isCurrent(owner)) return
         val safe = GatewayRuntime.status.value
+        if (status.phase == GatewayEngineController.Phase.RUNNING) {
+            NativeCoreSession.connect(owner, filesDir)
+        } else {
+            NativeCoreSession.suspend(owner)
+        }
         Log.i("MagpieGateway", safe.phase.name + ": " + safe.message)
         if (foregroundReady) {
             try {
@@ -120,6 +131,7 @@ class GatewayService : Service() {
     override fun onDestroy() {
         // Preserve startup failures on screen; stopping a failed service must not overwrite FAILED.
         controller?.stop()
+        NativeCoreSession.disconnect(owner)
         foregroundReady = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()

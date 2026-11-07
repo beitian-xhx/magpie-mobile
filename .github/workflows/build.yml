@@ -12,10 +12,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check out the fixed upstream core
+        uses: actions/checkout@v4
+        with:
+          repository: yetone/magpie
+          ref: 54dc257f100e2ca82a843b1eea6a24b8006781f5
+          path: build-tmp/upstream
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -26,16 +35,27 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: build-tmp/upstream/go.mod
+          cache-dependency-path: build-tmp/upstream/go.sum
+
       - name: Check actual startup manifest contract
         run: python3 scripts/check-startup-contract.py
 
-      - name: Fetch verified engine assets
-        run: bash scripts/fetch-assets.sh
+      - name: Apply exact hash-pinned mobile core patch
+        run: |
+          python3 scripts/test_apply_mobile_core.py
+          python3 scripts/apply-mobile-core.py --source-root build-tmp/upstream --check
+          python3 scripts/apply-mobile-core.py --source-root build-tmp/upstream
+
+      - name: Fetch verified Bun runtime
+        run: bash scripts/fetch-assets.sh --bun-only
 
       - name: Run core and app JVM regression tests
         run: gradle :core:test :app:testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Upload regression reports even on failure
+      - name: Upload JVM regression reports even on failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -47,8 +67,57 @@ jobs:
             app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: warn
 
+      - name: Run actual mobile Go safety tests
+        working-directory: build-tmp/upstream
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          go test -tags nogui ./internal/access -count=1 -timeout=3m
+          go test -json -tags nogui,mobile ./internal/gateway ./internal/gui -run '^TestMobile' -count=1 -timeout=3m | tee ../mobile-go-tests.jsonl
+
+      - name: Build the Android ARM64 mobile core
+        working-directory: build-tmp/upstream
+        env:
+          CGO_ENABLED: '0'
+          GOOS: android
+          GOARCH: arm64
+        run: |
+          set -euo pipefail
+          go build -trimpath -buildmode=pie -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.1' -o ../magpie-mobile-android-arm64 .
+          cp ../magpie-mobile-android-arm64 ../../app/src/main/jniLibs/arm64-v8a/libmagpie_exec.so
+          sha256sum ../magpie-mobile-android-arm64 > ../mobile-core.sha256
+          go version -m ../magpie-mobile-android-arm64 > ../mobile-core-build-info.txt
+          mkdir -p ../../app/src/main/assets/licenses/magpie
+          cp LICENSE ../../app/src/main/assets/licenses/magpie/LICENSE.txt
+
+      - name: Upload core safety evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-core-evidence-${{ github.sha }}
+          path: |
+            build-tmp/mobile-go-tests.jsonl
+            build-tmp/mobile-core.sha256
+            build-tmp/mobile-core-build-info.txt
+          if-no-files-found: warn
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK contains exactly the rebuilt core
+        run: |
+          python3 - <<'PY'
+          import hashlib, pathlib, struct, zipfile
+          native = pathlib.Path('build-tmp/magpie-mobile-android-arm64').read_bytes()
+          assert native[:4] == b'\x7fELF' and native[4] == 2
+          assert struct.unpack_from('<H', native, 16)[0] == 3, 'expected ELF PIE'
+          assert struct.unpack_from('<H', native, 18)[0] == 183, 'expected AArch64'
+          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as z:
+              packaged = z.read('lib/arm64-v8a/libmagpie_exec.so')
+          assert hashlib.sha256(packaged).digest() == hashlib.sha256(native).digest()
+          print('PASS: packaged mobile core matches exact CI build', hashlib.sha256(native).hexdigest())
+          PY
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -62,11 +131,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v0.1.1-startup-fix-${GITHUB_SHA:0:8}"
-          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.1-startup-fix.apk
-          sha256sum magpie-mobile-0.1.1-startup-fix.apk | tee magpie-mobile-0.1.1-startup-fix.apk.sha256
-          printf "Commit: %s\nActions run: %s/%s/actions/runs/%s\n" "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
+          tag="v0.1.2-secure-core-${GITHUB_SHA:0:8}"
+          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.2-secure-core.apk
+          sha256sum magpie-mobile-0.1.2-secure-core.apk | tee magpie-mobile-0.1.2-secure-core.apk.sha256
+          printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.1 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
+          cat build-tmp/mobile-core.sha256 >> build-info.txt
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "0.1.1 网关启动修复 (${GITHUB_SHA:0:8})" --notes "修复服务/界面状态断线、启动输出丢失、无限恢复与停止竞态。JVM 回归和 APK 编译由 CI 验证；实体手机 FGS/网关启停仍需安装后确认。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create "$tag" --title "0.1.2 安全鉴权与核心密钥 (${GITHUB_SHA:0:8})" --notes "固定Go源码+真实mobile补丁；严格客户端鉴权、调试关闭、管理面loopback与受控API、核心签发App密钥。JVM/Go回归与APK编译由CI验证；实体手机新安全接入仍需安装后验证，不代表真实渠道已通过。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
           fi
-          gh release upload "$tag" magpie-mobile-0.1.1-startup-fix.apk magpie-mobile-0.1.1-startup-fix.apk.sha256 build-info.txt --clobber
+          gh release upload "$tag" magpie-mobile-0.1.2-secure-core.apk magpie-mobile-0.1.2-secure-core.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber

@@ -30,15 +30,18 @@ class ChatClient(private val config: GatewayConfig) {
             if (maxTokens != null) put("max_tokens", maxTokens)
         }.toString()
 
-        val conn = URL(config.chatCompletionsPath()).openConnection() as HttpURLConnection
+        val conn = URL(config.chatCompletionsPath()).openConnection(java.net.Proxy.NO_PROXY) as HttpURLConnection
         conn.requestMethod = "POST"
         conn.connectTimeout = config.connectTimeout.toMillis().toInt()
         conn.readTimeout = config.readTimeout.toMillis().toInt()
         conn.doOutput = true
+        conn.instanceFollowRedirects = false
         conn.setRequestProperty("Content-Type", "application/json")
         conn.setRequestProperty("Authorization", "Bearer " + config.gatewayKey)
         try {
-            conn.outputStream.use { it.write(body.toByteArray()) }
+            val bytes = body.toByteArray(Charsets.UTF_8)
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { it.write(bytes) }
             val code = conn.responseCode
             // 错误响应可能没有 body（如 429 空 body）：errorStream 可能为 null，不能直接读
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream

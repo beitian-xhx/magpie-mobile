@@ -20,7 +20,8 @@ class ModelsClient(private val config: GatewayConfig) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun list(): List<ModelEntry> {
-        val conn = URL(config.modelsPath()).openConnection() as HttpURLConnection
+        val conn = URL(config.modelsPath()).openConnection(java.net.Proxy.NO_PROXY) as HttpURLConnection
+        conn.instanceFollowRedirects = false
         conn.connectTimeout = config.connectTimeout.toMillis().toInt()
         conn.readTimeout = config.readTimeout.toMillis().toInt()
         conn.setRequestProperty("Authorization", "Bearer " + config.gatewayKey)

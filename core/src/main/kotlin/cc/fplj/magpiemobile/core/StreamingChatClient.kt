@@ -33,7 +33,7 @@ class StreamingChatClient(private val config: GatewayConfig) {
         var conn: HttpURLConnection? = null
         var httpCode: Int? = null
         try {
-            val connection = URL(config.chatCompletionsPath()).openConnection() as HttpURLConnection
+            val connection = URL(config.chatCompletionsPath()).openConnection(java.net.Proxy.NO_PROXY) as HttpURLConnection
             conn = connection
             connection.requestMethod = "POST"
             connection.connectTimeout = config.connectTimeout.toMillis().toInt()

@@ -27,21 +27,29 @@ verify() { # verify <file> <expected>
   echo "$2  $1" | sha256sum -c - >/dev/null || { echo "哈希不匹配: $1" >&2; exit 1; }
 }
 
-if [ ! -f build-tmp/magpie-cli ]; then
-  fetch build-tmp/magpie-cli "$MAGPIE_URL"
-fi
-verify build-tmp/magpie-cli "$MAGPIE_SHA256"
-cp build-tmp/magpie-cli "$DEST/libmagpie_exec.so"
+case "${1:-}" in
+  "")
+    if [ ! -f build-tmp/magpie-cli ]; then fetch build-tmp/magpie-cli "$MAGPIE_URL"; fi
+    verify build-tmp/magpie-cli "$MAGPIE_SHA256"
+    cp build-tmp/magpie-cli "$DEST/libmagpie_exec.so"
+    ;;
+  --bun-only) ;; # CLI is rebuilt from the pinned source plus verified mobile patch manifest
+  *) echo "Unsupported option" >&2; exit 2 ;;
+esac
 
 if [ ! -f build-tmp/bun.zip ]; then
   fetch build-tmp/bun.zip "$BUN_URL"
 fi
 verify build-tmp/bun.zip "$BUN_ZIP_SHA256"
-rm -rf build-tmp/bun-extract && mkdir -p build-tmp/bun-extract
-unzip -q -o build-tmp/bun.zip -d build-tmp/bun-extract
-BUN_BIN=$(find build-tmp/bun-extract -type f -name bun | head -1)
-[ -n "$BUN_BIN" ] || { echo "zip 内未找到 bun" >&2; exit 1; }
-cp "$BUN_BIN" "$DEST/libbun_exec.so"
+python3 - <<'PY'
+from pathlib import Path
+import zipfile
+with zipfile.ZipFile("build-tmp/bun.zip") as archive:
+    entries = [item for item in archive.infolist() if not item.is_dir() and item.filename.rsplit("/", 1)[-1] == "bun"]
+    if len(entries) != 1:
+        raise SystemExit("Expected exactly one Bun executable in verified archive")
+    Path("app/src/main/jniLibs/arm64-v8a/libbun_exec.so").write_bytes(archive.read(entries[0]))
+PY
 
 chmod +x "$DEST"/*.so
 sha256sum "$DEST"/*.so
