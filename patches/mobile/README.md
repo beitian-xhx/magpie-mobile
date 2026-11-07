@@ -15,7 +15,7 @@ python3 scripts/apply-mobile-core.py --source-root /path/to/pinned-magpie
 - --source-root 必填：固定 Magpie Git checkout 或源码归档根目录。
 - --patch-root 可选：受信任补丁包根目录，默认本仓库 patches/mobile；不是不受信任外部补丁入口。
 - --check：只核对，不写入，不下载依赖，不执行 Go 或构建工具。
-- Git checkout 核对 HEAD；归档不能证明整个 commit，只通过 go.mod、七个目标文件的 SHA256 固定相关源码。
+- Git checkout 核对 HEAD；归档不能证明整个 commit，只通过 go.mod、八个目标文件的 SHA256 固定相关源码。
 - 原文件 hash、每条 old 文字唯一匹配、结果 hash、overlay 完整清单/hash 全部先通过才写入。拒绝偏移、模糊匹配、重复应用和混合状态。
 - 每个文件原子替换；I/O 失败回滚已完成的文件。源码目录必须为独占工作树，不支持并发写入或文件系统突然换挂载；失败后重新检查，不自动套另一通道。
 
@@ -43,14 +43,19 @@ CLI 运行时兼容：mobile 的 printWeb 在旧桌面输出之前，仅打印 w
 | GET | /api/providers |
 | POST | /api/caller-keys/add-key |
 | POST | /api/caller-keys/copy-key |
+| POST | /api/mobile/providers/create |
+| GET | /api/mobile/providers/editable/{id} |
+| POST | /api/mobile/providers/edit |
 
 copy-key 是共享 task-1 revision 3 确认的新增恢复白名单；客户端仅用于本 App 唯一识别的自有 key。完整 secret 只能内存→App 私有文件，不进 UI、日志、剪贴板或导出。add-key 请求 {"name":"..."}；copy-key 请求 {"key":"<core-issued-id>"}；原核心回包 {"keys": [...], "accountNames": {...}, "secret": "..."}。GET keys 只有 masked，不含完整 secret；新 key 格式 sk-magpie-key- + 48 hex，由 core 随机签发，不由 App 猜造。
 
 能力 JSON 固定为：
 
 ```json
-{"schemaVersion":1,"coreVersion":"<Version>","mobile":true,"loopbackKeys":true,"debugEndpoints":false,"adminLoopbackOnly":true,"nativeAutoUpdate":false}
+{"schemaVersion":1,"coreVersion":"<Version>","mobile":true,"loopbackKeys":true,"debugEndpoints":false,"adminLoopbackOnly":true,"nativeAutoUpdate":false,"providerSchemaVersion":1,"providerManagement":true}
 ```
+
+Provider仅新增受控创建、canonical快照与revision限定编辑，详细字段与保留/锁限制见[Provider协议](<PROVIDER_API.md>)；不开放原generic provider/save。
 
 其余 /api 精确方法/路径均 404，包括 HEAD/OPTIONS、unknown、desktop execution、update/restart、backup、provider save/test 和 key rotate/off/on/remove。无 cookie/错误 cookie 先由原 webGuard 拒绝；外站 Origin/Fetch-Site 仍由原 CORS 层拒绝；因此这些请求可先返回 401/403，而不是绕过鉴权强求 404。非规范路径与 RawPath 编码也拒绝，不能通过 ServeMux 自动重定向钻白名单。
 
@@ -61,10 +66,10 @@ copy-key 是共享 task-1 revision 3 确认的新增恢复白名单；客户端�
 建议 Actions 在独占固定 checkout 应用后执行（由 Lead 维护 CI）：
 
 ```sh
-go test -tags nogui,mobile ./internal/gateway ./internal/gui ./internal/cli -run '^TestMobile' -count=1
+go test -tags nogui,mobile ./internal/gateway ./internal/gui ./internal/cli ./internal/provider -run '^TestMobile' -count=1
 GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -buildmode=pie -tags nogui,mobile -o magpie-android-arm64 .
 ```
 
 网关预算回归仅使用上游测试套件的 local httptest fake，无真实提供商/模型调用或额度支出。其余移动回归使用语义路由、内存 handler 和隔离 key 存储。
 
-兼容性边界：匿名 ServedBy/ServedBusy HTTP 探活在 mobile 返回 unknown，不能为其放开匿名 root/统计 API。启动后同进程 GUI 使用 served 内部状态；占用探测另有 TCP Taken，App readiness 是双 TCP，不需要匿名 200。旧 desktop helpers（例如只有 callback/image token 的客户端）必须改为真正 key 或在 mobile 禁用；本补丁不支持跨进程旧网关自动识别/迁移，不承诺订阅插件无需改造即可运行。providers/state 原上游读取可能触发元数据刷新；当前白名单不允许付费测试或配置写入。
+兼容性边界：匿名 ServedBy/ServedBusy HTTP 探活在 mobile 返回 unknown，不能为其放开匿名 root/统计 API。启动后同进程 GUI 使用 served 内部状态；占用探测另有 TCP Taken，App readiness 是双 TCP，不需要匿名 200。旧 desktop helpers（例如只有 callback/image token 的客户端）必须改为真正 key 或在 mobile 禁用；本补丁不支持跨进程旧网关自动识别/迁移，不承诺订阅插件无需改造即可运行。providers/state 原上游读取可能触发元数据刷新；当前白名单不允许付费测试或未经受控canonical事务的配置写入。

@@ -1,39 +1,42 @@
 # Magpie-Mobile（开发验证版）
 
-目标与范围见 [移植计划](plan.md)。用户已确认 0.1.1 修复版在当前手机上启停正常；这不等于长时后台、多系统或付费渠道已验收。
+目标与范围见 [移植计划](plan.md)。不是主要GUI功能完整覆盖版。用户已确认0.1.1在当前手机启停正常；0.1.2安全接入有CI/host证据，不扩展为真实渠道、多系统或后台稳定验收。
 
-## 当前里程碑：0.1.2-secure-core
+## 当前里程碑：0.1.3-providers
 
-本版本从固定 Magpie commit 54dc257f100e2ca82a843b1eea6a24b8006781f5 重新构建 Android ARM64 核心，加入真实 mobile,nogui 安全策略，而不是继续打包未补丁的官方 ELF。
+- Compose 原生提供商列表、筛选、API Key 新增、模型ID输入/勾选、读取并安全编辑。
+- 初版新增/编辑限定自定义 API-key OpenAI Chat，可用 DeepSeek/OpenAI 地址模板；模板不是订阅登录或真实推理验收。
+- 管理客户端只用3430专用Cookie；网关仍用3425核心注册Key，管理凭据不进入状态流、Intent、日志或WebView。
+- 创建DTO与编辑DTO分离。编辑必须先取得核心新快照+opaque revision，只提交dirty字段；版本冲突拒绝覆盖，不静默重读重写。
+- 空编辑Key保留原值；主动清空模型才禁用全部，Name-only不能把原implicitAll变成noModels。
+- 核心从最新canonical配置事务中开始，受控原子写并保留未支持字段/注释/已有凭据。异常文件、重复id、失效revision、未知字段等拒绝。
+- 提供商文件读异常不是正常空列表；暂停写入。POST结果未知后清输入Key，禁止同draft重放，先刷新真实核心状态。
+- Key仅留短暂密码表单/请求与App私有核心配置，不展示完整保存Key；不rememberSaveable，不自动贴剪贴板。
+- 外部地址须HTTPS；本机HTTP仅由用户明确允许literal loopback。该页面不自动test/detect或调用模型。
 
-- 本机与非本机客户端都必须持核心注册的有效 Key；占位值、错误、撤销、过期或受限 Key 不再退回匿名。
-- 移动构建关闭 Claude runs、heap/CPU/goroutines、restart 等调试入口，也关闭 dumpFirst 旁路与 HTTP 临时密钥交换。
-- 管理面仅允许 loopback。宿主固定网关 127.0.0.1:3425；不开放 LAN，不自动建隧道。
-- native 自更不启动，危险/未验收管理 API 默认拒绝；当前仅允许安全能力、状态、提供商只读、客户端密钥注册及本App密钥只读恢复。
-- 管理凭据每次 Service 生命周期独立随机生成，仅经环境注入并留在进程内；不共享给 WebView、Intent、状态流或诊断。
-- 管理 3430 用专用 Cookie，网关 3425 用客户端 Bearer；不从错误端口的 hello 或 CLI 掩码表猜凭据。
-- App Key 由核心签发，保存真实 id/name/secret 到私有 0600 文件（FBE保护、原子写）。重启重读核心，复用原密钥；撤销/受限不自动建替代Key。旧占位文件保留但不再用于请求。
-- [能力接口与密钥存储](core/src/main/kotlin/cc/fplj/magpiemobile/core/CoreManagementClient.kt)遇版本/形状不兼容即拒绝写操作。写操作结果未知时先重读、不自动重发。
+## 受控接口
 
-真实补丁及哈希清单位于 [移动补丁包](patches/mobile/manifest.json)，固定源码精确匹配应用；旧的 [M1–M5 设计稿](docs/upstream-patches-draft.md)仅作历史设计，不是编译依据。
+见 [提供商客户端](core/src/main/kotlin/cc/fplj/magpiemobile/core/ProviderManagementClient.kt) 与 [精确移动补丁](patches/mobile/manifest.json)。
 
-## CI 验证
+- GET /api/providers：现有列表，key为安全metadata，models对象数组与chosen原始ID分开。
+- POST /api/mobile/providers/create：只允许基础创建字段。
+- GET /api/mobile/providers/editable/{id}：不含完整Key的canonical编辑快照与revision。
+- POST /api/mobile/providers/edit：限定dirty字段，不能通过原任意provider/save破坏配置。
+- provider/test、detect、删除、订阅/桌面执行及其他未验收操作仍不开放。
 
-Actions 验证实际 manifest、Python补丁应用器回归、Kotlin core/app JVM回归、真实Go移动鉴权回归和Android ARM64 PIE构建。最后比对APK里的CLI与刚构建载荷SHA256，发布独立提交SHA的APK/校验值/核心构建信息。Bun继续固定1.4.2并核对官方ZIP哈希。
+## 构建与验证
 
-当前源码新增测试不等于测试已通过；以对应提交的Actions和报告为准。JVM/主机Go回归不是实体手机新增安全连接的运行验收。
+固定Magpie commit54dc257f/Go1.26.8，mobile,nogui Android ARM64 PIE；Bun固定1.4.2并校验官方ZIP。Actions跑Python应用器、Kotlin/App JVM、Go安全/提供商事务和真实host核心烟测，最后核对APK原生CLI与构建产物SHA256。
+当前新增测试仅编写时不算通过；以对应提交的Actions与发布产物为准。host烟测使用synthetic Key与保留域名，不做真实推理。
 
-## 新安全版本的手机验收
+## 手机操作
 
-1. 安装 0.1.2-secure-core 独立Release包，核对页面版本/提交SHA；保留旧应用数据，遇签名冲突先回报，不卸载清数据绕过。
-2. 启动网关，状态仍显示端口就绪，然后“核心安全连接”显示鉴权/注册完成。
-3. 停止并重新启动，客户端密钥应复用，不能每次增加同名Key；未开启通知也能在页面看到结果。
-4. 可刷新模型目录，但有模型/密钥不代表已经配置真实API渠道。不得以默认模型列表冒充推理通过。
-5. 如连接失败，发版本、状态卡和安全连接错误；不贴完整密钥。
+1. 安装对应0.1.3独立Release，核对版本/SHA；若签名冲突先回报，保留旧应用和数据。
+2. 启动并完成“核心安全连接”，再刷新“提供商管理”列表。
+3. 新增自己的可信API地址/Key和账号可用的原始模型ID；保存前会二次确认，不自动推理。
+4. 编辑先读取新快照；Key留空保持，未触碰的模型和高级设置保持。冲突或未知结果先重读，不重复点击保存。
+5. 保存后刷新网关模型目录。凭据已配置、模型已列出、保存已确认，都不等于真实推理已通过。
 
-## 后续计划与边界
+## 后续边界
 
-- 提供商创建/编辑、真实API和订阅接入将按固定 /api/provider/save 等接口逐步实现；provider test/detect 会实际调用模型并可能多次重试，必须另获授权和预算。
-- 本阶段不调用真实模型、不导入其它App私有凭据、不完成收费/签到/充值/额度重置。
-- M4加密备份/SAF桥、数据库、高级路由、已验证插件、长时后台、多系统/16KB完整测试和许可分发义务仍待完成。
-- Claude订阅、本地ML、RTK与未验证stdio程序限制见实施计划；同UID插件不是沙箱。
+真实API/订阅测试需额外用户授权与预算。多协议/订阅编辑、M4加密SAF桥、数据库、高级路由、已验证插件、后台多系统16KB、完整许可义务仍按计划推进。同UID插件不是沙箱。

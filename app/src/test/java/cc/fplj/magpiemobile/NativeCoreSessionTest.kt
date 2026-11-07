@@ -13,6 +13,8 @@ class NativeCoreSessionTest {
         try {
             assertFalse(NativeCoreSession.status.value.toString().contains(key))
             assertFalse(NativeCoreSession.status.value.ready)
+            assertEquals(null, NativeCoreSession.providerSessionId())
+            assertThrows(IllegalStateException::class.java) { NativeCoreSession.providerClient() }
             assertThrows(IllegalStateException::class.java) { NativeCoreSession.gatewayConfig() }
         } finally { NativeCoreSession.disconnect(owner) }
     }

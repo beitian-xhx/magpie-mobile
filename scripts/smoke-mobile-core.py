@@ -59,8 +59,9 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
             time.sleep(.1)
         else: raise AssertionError('authenticated management never became ready')
         cap=json.loads(body)
-        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3188-mobile.1','mobile':True,
-                     'loopbackKeys':True,'debugEndpoints':False,'adminLoopbackOnly':True,'nativeAutoUpdate':False}
+        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3188-mobile.2','mobile':True,
+                     'loopbackKeys':True,'debugEndpoints':False,'adminLoopbackOnly':True,'nativeAutoUpdate':False,
+                     'providerSchemaVersion':1,'providerManagement':True}
         assert request(admin,'/api/mobile/capabilities')[0]==401
         assert request(gateway,'/api/hello')[0]==401
         assert request(gateway,'/v1/models',headers={'Authorization':'Bearer magpie'})[0]==401
@@ -76,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         own_id=own[0]['id']
         auth={'Authorization':'Bearer '+secret}
         code,body=request(gateway,'/api/hello',headers=auth)
-        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3188-mobile.1'}
+        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3188-mobile.2'}
         assert request(gateway,'/v1/magpie/goroutines',headers=auth)[0]==404
         assert request(gateway,'/v1/magpie/heap',headers=auth)[0]==404
         assert request(admin,'/api/window/restart','POST',{},cookie)[0]==404
@@ -85,13 +86,40 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         assert len([key for key in listed if key['id']==own_id])==1
         code,body=request(admin,'/api/caller-keys/copy-key','POST',{'key':own_id},cookie)
         assert code==200 and json.loads(body)['secret']==secret
+        # Safe provider persistence using synthetic credentials and a reserved local URL.
+        # No provider/test/detect or authenticated chat is called here.
+        vendor_key='synthetic-provider-key-never-real'
+        draft={'new':True,'id':'host-provider','name':'Host provider','chat':'https://provider.invalid/v1',
+               'key':vendor_key,'models':['probe-model'],'noModels':False}
+        assert request(admin,'/api/mobile/providers/create','POST',draft)[0]==401
+        code,body=request(admin,'/api/mobile/providers/create','POST',draft,cookie)
+        assert code==200,'safe provider creation failed'
+        provider=json.loads(body)
+        assert provider['id']=='host-provider' and provider['key']['set'] and vendor_key not in body.decode()
+        original_revision=provider['revision']
+        code,body=request(admin,'/api/mobile/providers/editable/host-provider',headers=cookie)
+        assert code==200 and json.loads(body)['revision']==original_revision
+        code,body=request(admin,'/api/mobile/providers/edit','POST',
+                          {'id':'host-provider','revision':original_revision,'name':'Host edited'},cookie)
+        assert code==200
+        edited=json.loads(body)
+        assert edited['name']=='Host edited' and edited['models']==['probe-model'] and edited['key']['set']
+        assert request(admin,'/api/mobile/providers/edit','POST',
+                       {'id':'host-provider','revision':original_revision,'name':'stale write'},cookie)[0]==409
+        assert request(admin,'/api/provider/test','POST',{'id':'host-provider'},cookie)[0]==404
+        assert request(admin,'/api/provider/detect','POST',{'id':'host-provider'},cookie)[0]==404
+        code,body=request(admin,'/api/mobile/providers/edit','POST',
+                          {'id':'host-provider','revision':edited['revision'],'models':[],'noModels':True},cookie)
+        assert code==200 and json.loads(body)['noModels'] is True and json.loads(body)['models']==[]
+        code,body=request(admin,'/api/providers',headers=cookie)
+        assert code==200 and vendor_key not in body.decode()
         time.sleep(.3)
         assert p.poll() is None,'core must survive the CLI printWeb path'
         assert admin_key not in ''.join(tail) and secret not in ''.join(tail),'credential leaked to startup output'
         p.terminate();p.wait(timeout=5);t.join(timeout=1)
         assert not is_listening(admin_port) and not is_listening(gateway_port),'orphan listener after stop'
         passed=True
-        print('PASS: host serve startup, strict key/cookie auth, core-issued key/copy, debug denial, safe CLI output and stop; no inference')
+        print('PASS: host serve startup, strict key/cookie auth, core-issued key/copy, safe provider create/edit/revision, debug denial, safe CLI output and stop; no inference')
     finally:
         if p.poll() is None:
             p.kill();p.wait(timeout=5)

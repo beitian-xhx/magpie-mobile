@@ -37,7 +37,7 @@ func mobileAPIAllowed(method, p string) bool {
 			return true
 		}
 	}
-	return method == http.MethodPost && (p == "/api/caller-keys/add-key" || p == "/api/caller-keys/copy-key")
+	return mobileProviderAPIAllowed(method, p) || method == http.MethodPost && (p == "/api/caller-keys/add-key" || p == "/api/caller-keys/copy-key")
 }
 
 func mobileAPI(next http.Handler) http.Handler {
@@ -61,9 +61,12 @@ func mobileAPI(next http.Handler) http.Handler {
 					DebugEndpoints   bool   `json:"debugEndpoints"`
 					AdminLoopbackOnly bool   `json:"adminLoopbackOnly"`
 					NativeAutoUpdate bool   `json:"nativeAutoUpdate"`
-				}{1, Version, true, true, false, true, false})
+					ProviderSchemaVersion int `json:"providerSchemaVersion"`
+					ProviderManagement bool `json:"providerManagement"`
+				}{1, Version, true, true, false, true, false, 1, true})
 				return
 			}
+			if mobileProviderServe(w, r) { return }
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -102,6 +102,16 @@ object NativeCoreSession {
         current.config ?: error("核心密钥尚未核对，不能使用本地占位密钥发送请求")
     }
 
+    fun providerSessionId(): Long? = synchronized(lock) {
+        binding?.takeIf { isRunningOwner(it) && it.config != null }?.owner
+    }
+
+    fun providerClient(): cc.fplj.magpiemobile.core.ProviderManagementClient = synchronized(lock) {
+        val current = binding ?: error("请先启动网关")
+        check(isRunningOwner(current) && current.config != null) { "核心安全连接尚未完成" }
+        cc.fplj.magpiemobile.core.ProviderManagementClient(current.credential)
+    }
+
     fun retry(filesDir: File) {
         val owner = synchronized(lock) { binding?.owner } ?: return
         connect(owner, filesDir)

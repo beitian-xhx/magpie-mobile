@@ -183,6 +183,10 @@ fun Dashboard(
                 Text("管理凭据仅留在进程内；客户端密钥由核心签发并私有保存。连接成功不代表已配置 API 渠道。", style = MaterialTheme.typography.bodySmall)
             }
         }
+        ProvidersPanel(enabled = clientReady && !sending, onProvidersChanged = {
+            modelIds = emptyList(); selectedModel = ""; modelsText = "配置已更新，请刷新模型目录"
+            ChatSessionHolder.invalidate()
+        })
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("模型目录", style = MaterialTheme.typography.titleSmall)
@@ -276,6 +280,9 @@ object ChatSessionHolder {
     private var cached: cc.fplj.magpiemobile.core.StreamingChatSession? = null
     private var cachedConfig: GatewayConfig? = null
     var chatFilePath: String = ""
+    @Synchronized
+    fun invalidate() { cached = null; cachedConfig = null }
+
     @Synchronized
     fun get(cfg: GatewayConfig): cc.fplj.magpiemobile.core.StreamingChatSession {
         if (cachedConfig == cfg) cached?.let { return it }

@@ -219,12 +219,35 @@ class ApplyMobileCoreTests(unittest.TestCase):
         self.assertIn("func TestMobilePrintWebNoKeyDoesNotPanic", tests)
         self.assertIn("func TestMobilePrintWebDoesNotOutputCredentials", tests)
 
+    def test_provider_revision_and_raw_edit_guards_are_packaged(self):
+        root = patcher.DEFAULT_PATCH_ROOT
+        manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+        patch = next(p for p in manifest["patches"] if p["path"] == "internal/provider/provider.go")
+        self.assertEqual(len(patch["replacements"]), 7)
+        inserts = "\n".join(r["new"] for r in patch["replacements"])
+        self.assertIn("mobileRevision", inserts)
+        self.assertIn("mobileProviderJSON", inserts)
+        self.assertIn("mobileStore(f)", inserts)
+        store = (root / "overlay/internal/provider/mobile_store.go").read_text(encoding="utf-8")
+        for guard in ("mobileAcquireLock", "if !held", "f.mobileRevision != old.mobileRevision", "edit.PatchJSON", "p := f.Providers[i].clone()", "hmac.Equal", "append([]string{}, p.Models...)", "mobileUnsafeComposite(before[key])", "mobileUnsafeComposite(value)", "mobileUnambiguousJSON(plain)", "mobileCanonicalSpelling(plain)", "depth > 64"):
+            self.assertIn(guard, store)
+        self.assertNotIn("Save(p)", store)
+        http = (root / "overlay/internal/gui/mobile_providers.go").read_text(encoding="utf-8")
+        self.assertIn("strict.DisallowUnknownFields()", http)
+        self.assertIn("seen[name]", http)
+        self.assertIn("provider_revision_conflict", http)
+        self.assertIn("provider_write_unknown", http)
+        policy = (root / "overlay/internal/gui/mobile_policy.go").read_text(encoding="utf-8")
+        self.assertIn("providerSchemaVersion", policy)
+        self.assertIn("providerManagement", policy)
+        self.assertNotIn("provider/test", policy)
+
     def test_real_package_inventory_and_policy_guards(self):
         root = patcher.DEFAULT_PATCH_ROOT
         manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["sourceRevision"], patcher.SOURCE_REVISION)
         self.assertEqual(manifest["goVersion"], "1.26.8")
-        self.assertEqual(len(manifest["patches"]), 7)
+        self.assertEqual(len(manifest["patches"]), 8)
         for overlay in manifest["overlays"]:
             data = (root / "overlay" / overlay["path"]).read_bytes()
             patcher.require_hash(data, overlay["sha256"], overlay["path"])
@@ -237,7 +260,7 @@ class ApplyMobileCoreTests(unittest.TestCase):
         for exception in ("ownCallback", "corsPreflight", "keyPageOpen", "imageTokenAsked", "oidcExchange", "proveAsked"):
             self.assertRegex(inserts, "!mobilepolicy.Enabled.*" + exception)
         tests = [(root / "overlay" / o["path"]).read_text() for o in manifest["overlays"] if o["path"].endswith("_test.go")]
-        self.assertEqual(len(tests), 3)
+        self.assertEqual(len(tests), 5)
         self.assertTrue(all(t.startswith("//go:build mobile\n") for t in tests))
         self.assertGreaterEqual(sum(t.count("func TestMobile") for t in tests), 10)
 

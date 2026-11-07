@@ -165,6 +165,41 @@
         }
       ],
       "resultSha256": "ea9c40898e94e3ccaee9ca51a412fd3d1404e00dc4a2502183d01453b9dbaa86"
+    },
+    {
+      "path": "internal/provider/provider.go",
+      "sha256": "41be0361f892829600d960cfce84bf03b297e9f64a9a305a4a84e93687974fc5",
+      "replacements": [
+        {
+          "old": "type file struct {\n",
+          "new": "type file struct {\n\tmobileRevision string // private read generation, never marshaled\n"
+        },
+        {
+          "old": "\terr := json.Unmarshal(bytes.TrimPrefix(b, utf8BOM), &f)\n\treturn f, err\n",
+          "new": "\terr := json.Unmarshal(mobileProviderJSON(bytes.TrimPrefix(b, utf8BOM)), &f)\n\tf.mobileRevision = mobileFileRevision(b)\n\treturn f, err\n"
+        },
+        {
+          "old": "\tif err := json.Unmarshal(b, &f); err != nil {\n",
+          "new": "\tif err := json.Unmarshal(mobileProviderJSON(b), &f); err != nil {\n"
+        },
+        {
+          "old": "\t\tif err := json.Unmarshal(bak, &f); err != nil {\n",
+          "new": "\t\tif err := json.Unmarshal(mobileProviderJSON(bytes.TrimPrefix(bak, utf8BOM)), &f); err != nil {\n"
+        },
+        {
+          "old": "\treturn f, nil\n}\n\n// validProviders is providers.json",
+          "new": "\tf.mobileRevision = mobileFileRevision(b)\n\treturn f, nil\n}\n\n// validProviders is providers.json"
+        },
+        {
+          "old": "\treturn json.Unmarshal(bytes.TrimPrefix(b, utf8BOM), &f) == nil\n",
+          "new": "\treturn json.Unmarshal(mobileProviderJSON(bytes.TrimPrefix(b, utf8BOM)), &f) == nil\n"
+        },
+        {
+          "old": "func store(f file) error {\n",
+          "new": "func store(f file) error {\n\tif handled, err := mobileStore(f); handled { return err }\n"
+        }
+      ],
+      "resultSha256": "37eb93888030be2076b762bb41ffe038c244ae53e953f91a7ba303f7fcddc8d7"
     }
   ],
   "overlays": [
@@ -181,12 +216,20 @@
       "sha256": "52b851547bcf392cc7466fcf3f6831830b0e76c78aeeaaf5604e250bcb7cd8ae"
     },
     {
-      "path": "internal/gui/mobile_policy_test.go",
-      "sha256": "2727c450a5dd061ddba47df57d43ebb7d91baa235746cc30f70f8cf9a48c36be"
+      "path": "internal/gui/mobile_policy.go",
+      "sha256": "3b296e003a093fef8a4274d9c8844a989f010751a4e468cdb377e75ef1777943"
     },
     {
-      "path": "internal/gui/mobile_policy.go",
-      "sha256": "fb64e1ab28650f753c2db8f642a11471251bc49591def85bbb221355360bfd89"
+      "path": "internal/gui/mobile_policy_test.go",
+      "sha256": "3bf76eda278bd05ca961c96aec74f60dd340bca0083bea502df4b65bca723eec"
+    },
+    {
+      "path": "internal/gui/mobile_providers.go",
+      "sha256": "03d53e4d6c29d241d38ed38aaf3ce304709142f659cdb7ed87dc220b1d027d49"
+    },
+    {
+      "path": "internal/gui/mobile_providers_test.go",
+      "sha256": "f970a0e937963ee2fa62b24298b169ff371ac602addcc7788c8853ba9d9dd0d0"
     },
     {
       "path": "internal/mobilepolicy/enabled_desktop.go",
@@ -195,6 +238,18 @@
     {
       "path": "internal/mobilepolicy/enabled_mobile.go",
       "sha256": "4a0f3cb7dc5fcd7b38db82c9414cc8ec1d0abbb04ea8c28b06f3bb22d0f4dcbd"
+    },
+    {
+      "path": "internal/provider/mobile_json.go",
+      "sha256": "fc7f1416bd33b5daa39119a847e7ec971a402fe3adc7b0156321dbcbf550507f"
+    },
+    {
+      "path": "internal/provider/mobile_store.go",
+      "sha256": "633132a345c43cc2d62fe75648d7498c671191503c7a7b6a25a9dbb8fae64483"
+    },
+    {
+      "path": "internal/provider/mobile_store_test.go",
+      "sha256": "988f6ff99e258e0303b38c55e967fc5203757113fec044f8aee0301cc1788629"
     }
   ]
 }
