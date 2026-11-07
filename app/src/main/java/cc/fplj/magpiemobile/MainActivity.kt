@@ -78,6 +78,8 @@ fun Dashboard(
     val scope = rememberCoroutineScope()
     var log by remember { mutableStateOf("nativeLibraryDir: " + layout.nativeLibraryDir.absolutePath) }
     var modelsText by remember { mutableStateOf("（未加载）") }
+    var modelIds by remember { mutableStateOf(listOf<String>()) }
+    var selectedModel by remember { mutableStateOf("") }
 
     fun append(s: String) {
         log = log + "\n" + s
@@ -131,6 +133,10 @@ fun Dashboard(
                         try {
                             val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKey)
                             val models = withContext(Dispatchers.IO) { ModelsClient(cfg).list() }
+                            modelIds = models.map { it.id }
+                            if (selectedModel.isBlank() && modelIds.isNotEmpty()) {
+                                selectedModel = modelIds.first()
+                            }
                             modelsText = if (models.isEmpty()) "（网关未运行或无模型）"
                             else models.take(8).joinToString("\n") { it.id }
                         } catch (e: Exception) {
@@ -155,9 +161,14 @@ fun Dashboard(
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("输入消息…") },
                 )
+                Text(
+                    if (selectedModel.isBlank()) "模型：未选择（先刷新模型列表）"
+                    else "模型：" + selectedModel,
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Button(onClick = {
                     val text = chatInput
-                    if (text.isNotBlank()) {
+                    if (text.isNotBlank() && selectedModel.isNotBlank()) {
                         chatInput = ""
                         scope.launch {
                             try {
@@ -165,7 +176,7 @@ fun Dashboard(
                                 val session = ChatSessionHolder.get(cfg)
                                 chatOut = ""
                                 val reply = withContext(Dispatchers.IO) {
-                                    session.send(text) { delta ->
+                                    session.send(text, selectedModel) { delta ->
                                         android.os.Handler(android.os.Looper.getMainLooper()).post {
                                             chatOut += delta // 流式增量渲染
                                         }
