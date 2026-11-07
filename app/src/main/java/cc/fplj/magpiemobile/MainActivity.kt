@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         GatewayKeyHolder.currentKeyCached = GatewayKeyHolder.currentKey(filesDir)
         // loopback-only 健康端点：root 联调用（curl 127.0.0.1:3431/healthz）
         try {
-            healthServer = HealthServer {
+            healthServer = HealthServer(infoProvider = {
                 mapOf(
                     "app" to "magpie-mobile",
                     "gatewayListening" to gatewayListening(),
@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
                         GatewayKeyHolder.currentKeyCached
                     ),
                 )
-            }.also { it.start() }
+            }).also { it.start() }
         } catch (_: Exception) {
         }
         setContent {
