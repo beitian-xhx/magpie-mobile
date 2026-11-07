@@ -9,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,7 +43,6 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
     var baseUrl by remember { mutableStateOf("") }
     var key by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
-    var keyFocused by remember { mutableStateOf(false) }
     var nameTouched by remember { mutableStateOf(false) }
     var idTouched by remember { mutableStateOf(false) }
     var localHttp by remember { mutableStateOf(false) }
@@ -117,10 +115,10 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
         old.scheme != next.scheme || old.host != next.host || port(old) != port(next)
     }
     val keyFingerprint = remember(key) { MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') } }
-    LaunchedEffect(open, normalized, keyFingerprint, keyFocused, localHttp, owner, snapshot?.revision, retryCatalog) {
+    LaunchedEffect(open, normalized, keyFingerprint, localHttp, owner, snapshot?.revision, retryCatalog) {
         val sequence = ++catalogSequence
         discoveryLoading = false; discoveryDone = false; discoveryError = ""
-        if (!open || !enabled || normalized.isEmpty() || keyFocused || newOriginNeedsKey) return@LaunchedEffect
+        if (!open || !enabled || normalized.isEmpty() || newOriginNeedsKey) return@LaunchedEffect
         if (snapshot == null) {
             if (!nameTouched) name = ProviderBaseUrl.suggestName(baseUrl)
             if (!idTouched) {
@@ -132,7 +130,7 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
             }
         }
         discoveryLoading = true
-        delay(700) // settle URL/credential changes; old requests cannot apply to this generation
+        delay(1000) // settle URL/credential changes; old requests cannot apply to this generation
         var request: ProviderModelDiscoveryRequest? = null
         try {
             val activeRequest = ProviderModelDiscoveryRequest(baseUrl, key, snapshot?.id, snapshot?.revision, localHttp)
@@ -240,10 +238,10 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
                 OutlinedTextField(key, { key = it }, enabled = !busy, singleLine = true, label = { Text(if (snapshot == null) "API Key（目录公开时可暂留空）" else "新API Key（留空使用已存密钥）") },
                     visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
-                    modifier = Modifier.fillMaxWidth().onFocusChanged { keyFocused = it.isFocused })
+                    modifier = Modifier.fillMaxWidth())
                 if (newOriginNeedsKey) Text("服务来源已改变，请明确填写新密钥；不会自动把旧密钥发到新地址。", color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "隐藏密钥" else "显示输入密钥") }
-                Text(if (discoveryLoading) "正在自动获取模型目录…" else if (discoveryDone) "目录已读取，可直接勾选模型" else "完成地址/密钥填写后自动读取模型，不发送推理", style = MaterialTheme.typography.bodySmall)
+                Text(if (discoveryLoading) "正在自动获取模型目录…" else if (discoveryDone) "目录已读取，可直接勾选模型" else "地址/密钥输入停顿1秒后自动读取，不需要切换焦点，不发送推理", style = MaterialTheme.typography.bodySmall)
                 if (discoveryError.isNotEmpty()) { Text(discoveryError, color = MaterialTheme.colorScheme.error); TextButton(onClick = { focus.clearFocus(); retryCatalog++ }) { Text("重试获取目录") } }
                 Row {
                     TextButton(enabled = modelOptions.isNotEmpty(), onClick = { selected = policy.chooseAll(); selectionMutation++; manualText = selected.joinToString("\n") }) { Text("全选") }

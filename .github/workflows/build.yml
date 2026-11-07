@@ -41,7 +41,9 @@ jobs:
           cache-dependency-path: build-tmp/upstream/go.sum
 
       - name: Check actual startup manifest contract
-        run: python3 scripts/check-startup-contract.py
+        run: |
+          python3 scripts/check-startup-contract.py
+          python3 scripts/check-model-discovery-trigger.py
 
       - name: Apply exact hash-pinned mobile core patch
         run: |
@@ -140,12 +142,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v0.1.4-models-ux-${GITHUB_SHA:0:8}"
-          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.4-models-ux.apk
-          sha256sum magpie-mobile-0.1.4-models-ux.apk | tee magpie-mobile-0.1.4-models-ux.apk.sha256
+          tag="v0.1.5-discovery-trigger-${GITHUB_SHA:0:8}"
+          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.5-discovery-trigger.apk
+          sha256sum magpie-mobile-0.1.5-discovery-trigger.apk | tee magpie-mobile-0.1.5-discovery-trigger.apk.sha256
           printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.3 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
           cat build-tmp/mobile-core.sha256 >> build-info.txt
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "0.1.4 自动模型目录与交互修复 (${GITHUB_SHA:0:8})" --notes "Base URL与凭据输入后自动只读模型目录，独立编辑页/模型勾选/自动标识、选择和失败草稿保留、停止清理状态；仅读供应商GET metadata、不test/detect、不自动推理。JVM/Go/host回归及APK由CI验证，手机与真实渠道另行验收。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create "$tag" --title "0.1.5 自动目录触发修复 (${GITHUB_SHA:0:8})" --notes "Base URL与凭据输入后自动只读模型目录，独立编辑页/模型勾选/自动标识、选择和失败草稿保留、停止清理状态；仅读供应商GET metadata、不test/detect、不自动推理。JVM/Go/host回归及APK由CI验证，手机与真实渠道另行验收。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
           fi
-          gh release upload "$tag" magpie-mobile-0.1.4-models-ux.apk magpie-mobile-0.1.4-models-ux.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber
+          gh release upload "$tag" magpie-mobile-0.1.5-discovery-trigger.apk magpie-mobile-0.1.5-discovery-trigger.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber
