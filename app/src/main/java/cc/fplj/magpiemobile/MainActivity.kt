@@ -43,6 +43,18 @@ import kotlinx.coroutines.withContext
  */
 class MainActivity : ComponentActivity() {
 
+    private var healthServer: HealthServer? = null
+
+    /** 网关端口探测：Socket connect 300ms 超时。 */
+    private fun gatewayListening(): String = try {
+        java.net.Socket().use { s ->
+            s.connect(java.net.InetSocketAddress("127.0.0.1", 3425), 300)
+            "yes"
+        }
+    } catch (_: Exception) {
+        "no"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val layout = EnginePaths.buildLayout(
@@ -52,6 +64,19 @@ class MainActivity : ComponentActivity() {
         )
         ChatSessionHolder.chatFilePath = File(filesDir, "chat.jsonl").absolutePath
         GatewayKeyHolder.currentKeyCached = GatewayKeyHolder.currentKey(filesDir)
+        // loopback-only 健康端点：root 联调用（curl 127.0.0.1:3431/healthz）
+        try {
+            healthServer = HealthServer {
+                mapOf(
+                    "app" to "magpie-mobile",
+                    "gatewayListening" to gatewayListening(),
+                    "gatewayKey" to cc.fplj.magpiemobile.core.SecretRedactor.redact(
+                        GatewayKeyHolder.currentKeyCached
+                    ),
+                )
+            }.also { it.start() }
+        } catch (_: Exception) {
+        }
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -67,6 +92,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        healthServer?.stop()
+        super.onDestroy()
     }
 }
 
