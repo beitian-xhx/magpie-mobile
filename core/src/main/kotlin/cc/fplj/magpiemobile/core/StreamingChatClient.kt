@@ -22,7 +22,7 @@ class StreamingChatClient(private val config: GatewayConfig) {
     fun stream(
         model: String,
         messages: List<ChatClient.Message>,
-        onDelta: (String) -> Unit,
+        onDelta: (String) -> Unit = {},
     ): String {
         val body = buildJsonObject {
             put("model", model)
