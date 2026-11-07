@@ -51,6 +51,8 @@ class MainActivity : Activity() {
             setTextIsSelectable(true)
         }
         val btnDiag = Button(this).apply { text = "一键诊断（页大小 + 两引擎版本）" }
+        val btnStartGw = Button(this).apply { text = "启动网关（前台服务）" }
+        val btnStopGw = Button(this).apply { text = "停止网关" }
         val btnMagpie = Button(this).apply { text = "运行 magpie --version" }
         val btnBun = Button(this).apply { text = "运行 bun --version" }
         out = TextView(this).apply {
@@ -59,11 +61,28 @@ class MainActivity : Activity() {
         }
         box.addView(info)
         box.addView(btnDiag)
+        box.addView(btnStartGw)
+        box.addView(btnStopGw)
         box.addView(btnMagpie)
         box.addView(btnBun)
         box.addView(out)
         root.addView(box)
         setContentView(root)
+
+        btnStartGw.setOnClickListener {
+            append("=== 启动网关 ===\n")
+            try {
+                startForegroundService(Intent(this, GatewayService::class.java))
+                append("startForegroundService 已提交；网关在 127.0.0.1:3425，管理 127.0.0.1:3430\n")
+            } catch (e: Exception) {
+                append("启动失败: " + e.javaClass.simpleName + ": " + e.message + "\n")
+            }
+        }
+        btnStopGw.setOnClickListener {
+            append("=== 停止网关 ===\n")
+            stopService(Intent(this, GatewayService::class.java))
+            append("stopService 已提交（onDestroy 内 destroy 进程，USER_STOP 不复活）\n")
+        }
 
         btnDiag.setOnClickListener {
             append("=== 设备诊断 ===\n")

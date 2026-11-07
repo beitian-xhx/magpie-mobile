@@ -34,5 +34,6 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation("androidx.core:core-ktx:1.15.0")
 }
