@@ -13,13 +13,19 @@ package cc.fplj.magpiemobile.core
 object SecretRedactor {
 
     fun redact(input: String): String {
+        // 单遍扫描合一：先长规则后短规则会在截断值上二次匹配，
+        // 故用占位符法——每个匹配立即替换为不含 sk 前缀的掩码。
         var out = input
-        out = out.replace(Regex("sk-magpie-key-[A-Za-z0-9]+")) { m -> m.value.take(4 + 13 + 4) + "…" }
-        out = out.replace(Regex("sk-[A-Za-z0-9-_]{8,}")) { m -> m.value.take(7) + "…" }
+        // 1) 网关 key（最长，先处理，掩码不含 sk- 触发词）
+        out = out.replace(Regex("sk-magpie-key-[A-Za-z0-9]+")) { "gw:" + it.value.takeLast(4) + "…" }
+        // 2) Bearer token
         out = out.replace(Regex("Bearer\\s+[A-Za-z0-9-._~]{8,}")) { m -> "Bearer " + m.value.drop(7).take(4) + "…" }
+        // 3) 查询串/配置密钥
         out = out.replace(Regex("(?i)(password|token|api_key)=([^\\s&]{4,})")) { m ->
             m.groupValues[1] + "=" + m.groupValues[2].take(4) + "…"
         }
+        // 4) 通用 sk- 密钥（放最后，避免吃到已掩码内容；掩码以 gw:/Bearer/=… 开头不含 sk-）
+        out = out.replace(Regex("sk-[A-Za-z0-9-_]{8,}")) { m -> m.value.take(7) + "…" }
         return out
     }
 }

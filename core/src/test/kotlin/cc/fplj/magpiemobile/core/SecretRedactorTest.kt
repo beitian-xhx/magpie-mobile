@@ -11,7 +11,7 @@ class SecretRedactorTest {
         val key = "sk-magpie-key-0123456789abcdef0123456789abcdef"
         val out = SecretRedactor.redact("used key $key for call")
         assertTrue(!out.contains(key))
-        assertTrue(out.contains("sk-m") && out.endsWith("…"))
+        assertTrue(out.contains("sk-m") && out.contains("…"))
     }
 
     @Test
