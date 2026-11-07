@@ -166,7 +166,7 @@ fun Dashboard(
                                 chatOut = ""
                                 val reply = withContext(Dispatchers.IO) {
                                     session.send(text) { delta ->
-                                        runOnUiThread { chatOut += delta } // 流式增量渲染
+                                        this@MainActivity.runOnUiThread { chatOut += delta } // 流式增量渲染
                                     }
                                 }
                                 chatOut = reply // 最终全文覆盖（含降级路径）
