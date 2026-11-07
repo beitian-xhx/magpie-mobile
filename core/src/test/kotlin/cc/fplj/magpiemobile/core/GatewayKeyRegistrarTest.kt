@@ -16,15 +16,15 @@ class GatewayKeyRegistrarTest {
     }
 
     @Test
-    fun addCmdQuotesName() {
-        assertEquals("$exe gateway-key add \"phone-app\"", GatewayKeyRegistrar.addCmd(exe, "phone-app"))
+    fun addKeyCmdQuotesName() {
+        assertEquals("$exe gateway-key add \"phone-app\"", GatewayKeyRegistrar.addKeyCmd(exe, "phone-app"))
     }
 
     @Test
     fun invalidNameRejected() {
-        assertFailsWith<IllegalArgumentException> { GatewayKeyRegistrar.addCmd(exe, "bad name") }
-        assertFailsWith<IllegalArgumentException> { GatewayKeyRegistrar.addCmd(exe, "") }
-        assertFailsWith<IllegalArgumentException> { GatewayKeyRegistrar.addCmd(exe, "a;rm") } // 注入拒绝
+        assertFailsWith<IllegalArgumentException> { GatewayKeyRegistrar.addKeyCmd(exe, "bad name") }
+        assertFailsWith<IllegalArgumentException> { GatewayKeyRegistrar.addKeyCmd(exe, "") }
+        assertFailsWith<IllegalArgumentException> { GatewayKeyRegistrar.addKeyCmd(exe, "a;rm") } // 注入拒绝
     }
 
     @Test
