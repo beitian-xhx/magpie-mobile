@@ -146,7 +146,7 @@ fun Dashboard(
         // ── 聊天测试 ──
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("聊天测试（非流式）", style = MaterialTheme.typography.titleSmall)
+                Text("聊天测试（流式优先，失败自动降级）", style = MaterialTheme.typography.titleSmall)
                 var chatInput by remember { mutableStateOf("") }
                 var chatOut by remember { mutableStateOf("") }
                 androidx.compose.material3.OutlinedTextField(
@@ -163,8 +163,13 @@ fun Dashboard(
                             try {
                                 val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKey)
                                 val session = ChatSessionHolder.get(cfg)
-                                val reply = withContext(Dispatchers.IO) { session.send(text) }
-                                chatOut = ChatSession.extractReply(reply)
+                                chatOut = ""
+                                val reply = withContext(Dispatchers.IO) {
+                                    session.send(text) { delta ->
+                                        runOnUiThread { chatOut += delta } // 流式增量渲染
+                                    }
+                                }
+                                chatOut = reply // 最终全文覆盖（含降级路径）
                             } catch (e: Exception) {
                                 chatOut = "发送失败：" + (e.message ?: e.javaClass.simpleName)
                             }
@@ -226,13 +231,14 @@ object GatewayKeyHolder {
 }
 
 object ChatSessionHolder {
-    @Volatile private var cached: cc.fplj.magpiemobile.core.ChatSession? = null
+    @Volatile private var cached: cc.fplj.magpiemobile.core.StreamingChatSession? = null
     @Volatile var chatFilePath: String = "/data/local/tmp/magpie-chat.jsonl"
 
-    fun get(cfg: GatewayConfig): cc.fplj.magpiemobile.core.ChatSession {
+    fun get(cfg: GatewayConfig): cc.fplj.magpiemobile.core.StreamingChatSession {
         val existing = cached
         if (existing != null) return existing
-        val s = cc.fplj.magpiemobile.core.ChatSession(
+        val s = cc.fplj.magpiemobile.core.StreamingChatSession(
+            cc.fplj.magpiemobile.core.StreamingChatClient(cfg),
             cc.fplj.magpiemobile.core.ChatClient(cfg),
             cc.fplj.magpiemobile.core.SessionStore(java.io.File(chatFilePath)),
             defaultModel = "deepseek/deepseek-chat", // P2 从 /v1/models 动态选
