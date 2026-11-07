@@ -1,9 +1,15 @@
 package cc.fplj.magpiemobile
 
+import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +20,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,68 +34,83 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import cc.fplj.magpiemobile.core.ChatSession
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cc.fplj.magpiemobile.core.EnginePaths
 import cc.fplj.magpiemobile.core.GatewayConfig
+import cc.fplj.magpiemobile.core.GatewayEngineController
 import cc.fplj.magpiemobile.core.ModelsClient
-import cc.fplj.magpiemobile.core.ProvisioningEvaluator
-import cc.fplj.magpiemobile.core.ProvisioningState
+import cc.fplj.magpiemobile.core.SecretRedactor
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * P1 Compose 仪表盘（plan.md §4.4）：
- * 状态头（ProvisioningEvaluator）+ 网关启停 + 模型速览（ModelsClient）+ 诊断。
- * 单页卡片布局；数据流单向：事件 → 协程 → core 组件 → State。
- */
 class MainActivity : ComponentActivity() {
-
     private var healthServer: HealthServer? = null
+    private var notificationNotice by mutableStateOf("")
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        refreshNotificationNotice()
+    }
 
-    /** 网关端口探测：Socket connect 300ms 超时。 */
-    private fun gatewayListening(): String = try {
-        java.net.Socket().use { s ->
-            s.connect(java.net.InetSocketAddress("127.0.0.1", 3425), 300)
-            "yes"
+    private fun refreshNotificationNotice() {
+        notificationNotice = if (!getSystemService(NotificationManager::class.java).areNotificationsEnabled()) {
+            "通知未开启：网关仍可启动；请看下方实时状态和错误，允许通知后可在通知栏停止网关。"
+        } else ""
+    }
+
+    private fun allowNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
         }
-    } catch (_: Exception) {
-        "no"
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshNotificationNotice()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val layout = EnginePaths.buildLayout(
-            applicationInfo.nativeLibraryDir,
-            filesDir,
-            cacheDir,
-        )
+        val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
         ChatSessionHolder.chatFilePath = File(filesDir, "chat.jsonl").absolutePath
-        GatewayKeyHolder.currentKeyCached = GatewayKeyHolder.currentKey(filesDir)
-        // loopback-only 健康端点：root 联调用（curl 127.0.0.1:3431/healthz）
+        try {
+            GatewayKeyHolder.currentKeyCached = GatewayKeyHolder.currentKey(filesDir)
+        } catch (e: Exception) {
+            GatewayRuntime.requestFailed(e) // corrupt credentials must not crash the entire Activity
+        }
         try {
             healthServer = HealthServer(infoProvider = {
-                mapOf(
-                    "app" to "magpie-mobile",
-                    "gatewayListening" to gatewayListening(),
-                    "gatewayKey" to cc.fplj.magpiemobile.core.SecretRedactor.redact(
-                        GatewayKeyHolder.currentKeyCached
-                    ),
-                )
+                val status = GatewayRuntime.status.value
+                mapOf("app" to "magpie-mobile", "version" to BuildConfig.VERSION_NAME,
+                    "state" to status.phase.name, "message" to status.message)
             }).also { it.start() }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("MagpieGateway", "观测端口不可用：" + e.javaClass.simpleName)
         }
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     Dashboard(
                         layout = layout,
+                        notificationNotice = notificationNotice,
+                        onAllowNotifications = ::allowNotifications,
                         onStartGateway = {
-                            startForegroundService(Intent(this, GatewayService::class.java))
+                            GatewayRuntime.requestStart()
+                            try {
+                                ContextCompat.startForegroundService(this, Intent(this, GatewayService::class.java))
+                            } catch (e: Exception) { GatewayRuntime.requestFailed(e) }
                         },
                         onStopGateway = {
-                            stopService(Intent(this, GatewayService::class.java))
+                            try {
+                                // Invalidate callbacks from this run before destruction/late spawn cleanup.
+                                GatewayRuntime.stoppedWithoutService()
+                                stopService(Intent(this, GatewayService::class.java))
+                            } catch (e: Exception) { GatewayRuntime.requestFailed(e) }
                         },
                     )
                 }
@@ -95,7 +119,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        healthServer?.stop()
+        healthServer?.stop() // this observation endpoint follows Activity, not the gateway lifetime
         super.onDestroy()
     }
 }
@@ -103,215 +127,171 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Dashboard(
     layout: EnginePaths.Layout,
+    notificationNotice: String,
+    onAllowNotifications: () -> Unit,
     onStartGateway: () -> Unit,
     onStopGateway: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var log by remember { mutableStateOf("nativeLibraryDir: " + layout.nativeLibraryDir.absolutePath) }
+    val gateway by GatewayRuntime.status.collectAsStateWithLifecycle()
+    val active = gateway.phase in setOf(GatewayEngineController.Phase.STARTING,
+        GatewayEngineController.Phase.RUNNING, GatewayEngineController.Phase.BACKOFF)
+    val running = gateway.phase == GatewayEngineController.Phase.RUNNING
+    var log by remember { mutableStateOf("") }
     var modelsText by remember { mutableStateOf("（未加载）") }
-    var modelIds by remember { mutableStateOf(listOf<String>()) }
+    var modelIds by remember { mutableStateOf(emptyList<String>()) }
     var selectedModel by remember { mutableStateOf("") }
-
-    fun append(s: String) {
-        log = log + "\n" + s
-    }
+    var loadingModels by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var chatInput by remember { mutableStateOf("") }
+    var chatOut by remember { mutableStateOf("") }
+    var modelMenu by remember { mutableStateOf(false) }
+    fun append(text: String) { log = (log + "\n" + SecretRedactor.redact(text)).takeLast(8192) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Magpie Mobile", style = MaterialTheme.typography.headlineMedium)
-
-        // ── 状态头 ──
+        Text("版本 " + BuildConfig.VERSION_NAME + " · " + BuildConfig.GIT_SHA, style = MaterialTheme.typography.bodySmall)
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                val state = ProvisioningEvaluator().evaluate(layout, EngineSupervisorHolder.supervisor)
-                Text(
-                    text = when (state) {
-                        is ProvisioningState.NotInstalled -> "未安装：载荷缺失"
-                        is ProvisioningState.NeedsSetup -> "需要初始化"
-                        is ProvisioningState.Ready -> "就绪（网关未运行）"
-                        is ProvisioningState.Starting -> "启动中…"
-                        is ProvisioningState.Running -> "运行中"
-                        is ProvisioningState.Failed -> "失败：" + state.lastError
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                )
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(when (gateway.phase) {
+                    GatewayEngineController.Phase.STOPPED -> "网关未运行"
+                    GatewayEngineController.Phase.STARTING -> "正在启动…"
+                    GatewayEngineController.Phase.RUNNING -> "运行中（本机端口已就绪）"
+                    GatewayEngineController.Phase.BACKOFF -> "异常退出，有限恢复中…"
+                    GatewayEngineController.Phase.FAILED -> "网关启动/运行失败"
+                }, style = MaterialTheme.typography.titleMedium)
+                Text(gateway.message, style = MaterialTheme.typography.bodySmall)
+                if (notificationNotice.isNotEmpty()) {
+                    Text(notificationNotice, style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onAllowNotifications) { Text("允许通知") }
+                }
             }
         }
-
-        // ── 网关控制 ──
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                append("启动网关（前台服务）…")
-                onStartGateway()
-            }) { Text("启动网关") }
-            Button(onClick = {
-                append("停止网关…")
-                onStopGateway()
-            }) { Text("停止网关") }
+            Button(enabled = !active, onClick = { append("已点击启动网关"); onStartGateway() }) { Text("启动网关") }
+            Button(enabled = active, onClick = { append("已请求停止网关"); onStopGateway() }) { Text("停止网关") }
         }
-
-        // ── 模型速览 ──
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("模型目录（/v1/models）", style = MaterialTheme.typography.titleSmall)
-                Button(onClick = {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("模型目录", style = MaterialTheme.typography.titleSmall)
+                Button(enabled = running && !loadingModels && !sending, onClick = {
+                    loadingModels = true
                     scope.launch {
                         try {
                             val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
                             val models = withContext(Dispatchers.IO) { ModelsClient(cfg).list() }
                             modelIds = models.map { it.id }
-                            if (selectedModel.isBlank() && modelIds.isNotEmpty()) {
-                                selectedModel = modelIds.first()
-                            }
-                            modelsText = if (models.isEmpty()) "（网关未运行或无模型）"
-                            else models.take(8).joinToString("\n") { it.id }
-                        } catch (e: Exception) {
-                            modelsText = "读取失败：" + (e.message ?: e.javaClass.simpleName) +
-                                "\n（网关未运行时属预期）"
-                        }
+                            if (selectedModel !in modelIds) selectedModel = modelIds.firstOrNull().orEmpty()
+                            modelsText = if (modelIds.isEmpty()) "核心没有可用模型，请先配置渠道/账号" else modelIds.take(8).joinToString("\n")
+                        } catch (e: CancellationException) { throw e }
+                        catch (e: Exception) { modelsText = "读取失败：" + SecretRedactor.redact(e.message ?: e.javaClass.simpleName) }
+                        finally { loadingModels = false }
                     }
-                }) { Text("刷新模型列表") }
-                Text(modelsText, style = MaterialTheme.typography.bodySmall)
+                }) { Text(if (loadingModels) "读取中…" else "刷新模型列表") }
+                Text(if (running) modelsText else "请先启动网关；端口就绪不代表已配置渠道和核心密钥", style = MaterialTheme.typography.bodySmall)
             }
         }
-
-        // ── 聊天测试 ──
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("聊天测试（流式优先，失败自动降级）", style = MaterialTheme.typography.titleSmall)
-                var chatInput by remember { mutableStateOf("") }
-                var chatOut by remember { mutableStateOf("") }
-                androidx.compose.material3.OutlinedTextField(
-                    value = chatInput,
-                    onValueChange = { chatInput = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("输入消息…") },
-                )
-                Text(
-                    if (selectedModel.isBlank()) "模型：未选择（先刷新模型列表）"
-                    else "模型：" + selectedModel,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Button(onClick = {
-                    val text = chatInput
-                    if (text.isNotBlank() && selectedModel.isNotBlank()) {
-                        chatInput = ""
-                        scope.launch {
-                            try {
-                                val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
-                                val session = ChatSessionHolder.get(cfg)
-                                chatOut = ""
-                                val reply = withContext(Dispatchers.IO) {
-                                    session.send(text, selectedModel) { delta ->
-                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                            chatOut += delta // 流式增量渲染
-                                        }
-                                    }
-                                }
-                                chatOut = reply // 最终全文覆盖（含降级路径）
-                            } catch (e: Exception) {
-                                chatOut = "发送失败：" + (e.message ?: e.javaClass.simpleName)
-                            }
-                        }
+                Text("聊天测试（流式）", style = MaterialTheme.typography.titleSmall)
+                Button(enabled = modelIds.isNotEmpty() && !sending, onClick = { modelMenu = true }) {
+                    Text(if (selectedModel.isBlank()) "请选择模型" else selectedModel)
+                }
+                DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
+                    modelIds.forEach { id ->
+                        DropdownMenuItem(text = { Text(id) }, onClick = { selectedModel = id; modelMenu = false })
                     }
-                }) { Text("发送") }
+                }
+                OutlinedTextField(value = chatInput, onValueChange = { chatInput = it }, enabled = !sending,
+                    modifier = Modifier.fillMaxWidth(), placeholder = { Text("输入消息…") })
+                Button(enabled = running && !sending && chatInput.isNotBlank() && selectedModel in modelIds, onClick = {
+                    val text = chatInput
+                    val model = selectedModel
+                    sending = true
+                    chatInput = ""
+                    chatOut = ""
+                    scope.launch {
+                        val deltas = Channel<String>(Channel.UNLIMITED)
+                        val render = launch { for (delta in deltas) chatOut += delta }
+                        try {
+                            val cfg = GatewayConfig(gatewayKey = GatewayKeyHolder.currentKeyCached)
+                            val session = ChatSessionHolder.get(cfg)
+                            val reply = withContext(Dispatchers.IO) { session.send(text, model) { delta -> deltas.trySend(delta) } }
+                            deltas.close(); render.join() // flush all deltas before final text; no delayed Handler replay
+                            chatOut = reply
+                        } catch (e: CancellationException) { throw e }
+                        catch (e: Exception) {
+                            deltas.close(); render.join()
+                            chatOut += "\n发送失败（未自动重复发送）：" + SecretRedactor.redact(e.message ?: e.javaClass.simpleName)
+                        } finally { deltas.close(); render.cancel(); sending = false }
+                    }
+                }) { Text(if (sending) "发送中…" else "发送") }
                 if (chatOut.isNotEmpty()) Text(chatOut, style = MaterialTheme.typography.bodySmall)
             }
         }
-
-        // ── 诊断 ──
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Button(onClick = {
                     scope.launch {
-                        val r = withContext(Dispatchers.IO) {
+                        val result = withContext(Dispatchers.IO) {
                             try {
                                 val runner = cc.fplj.magpiemobile.core.EngineProcessRunner()
-                                val mv = runner.run(
-                                    EnginePaths.magpieExecutable(layout).absolutePath,
-                                    listOf("--version"),
-                                    layout.homeDir, layout.cacheDir, layout.configDir,
-                                )
-                                val bv = runner.run(
-                                    EnginePaths.bunExecutable(layout).absolutePath,
-                                    listOf("--version"),
-                                    layout.homeDir, layout.cacheDir, layout.configDir,
-                                )
-                                "magpie exit=" + mv.exitCode + ": " + mv.stdout.trim() +
-                                    "\nbun exit=" + bv.exitCode + ": " + bv.stdout.trim()
-                            } catch (e: Exception) {
-                                "诊断异常：" + (e.message ?: e.javaClass.simpleName)
-                            }
+                                val magpie = runner.run(EnginePaths.magpieExecutable(layout).absolutePath,
+                                    listOf("--version"), layout.homeDir, layout.cacheDir, layout.configDir)
+                                val bun = runner.run(EnginePaths.bunExecutable(layout).absolutePath,
+                                    listOf("--version"), layout.homeDir, layout.cacheDir, layout.configDir)
+                                "magpie exit=" + magpie.exitCode + ": " + magpie.stdout.trim() + "\n" + magpie.stderr.take(1500) +
+                                    "\nbun exit=" + bun.exitCode + ": " + bun.stdout.trim() + "\n" + bun.stderr.take(1500)
+                            } catch (e: Exception) { "诊断异常：" + (e.message ?: e.javaClass.simpleName) }
                         }
-                        append(r)
+                        append(result)
                     }
                 }) { Text("一键诊断（两引擎版本）") }
             }
         }
-
-        // ── 日志 ──
         Card(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                log,
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("启动结果与引擎输出", style = MaterialTheme.typography.titleSmall)
+                Text("状态：" + gateway.phase + "\n" + gateway.message, style = MaterialTheme.typography.bodySmall)
+                if (gateway.outputTail.isNotEmpty()) Text(gateway.outputTail, style = MaterialTheme.typography.bodySmall)
+                if (log.isNotEmpty()) Text(log, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
 
-/** 会话级持有：supervisor 与网关 key（P2 换核心签发的真 key）。 */
-object EngineSupervisorHolder {
-    val supervisor = cc.fplj.magpiemobile.core.EngineSupervisor()
-}
-
+/** Local client credential only: persistence does not register it with the upstream engine. */
 object GatewayKeyHolder {
-    /**
-     * 网关客户端 key，持久化到 App 私有文件（FBE 保护）——重启后保持稳定，
-     * 引擎侧用同一 key 校验。文件权限 0600 语义（App 私有目录默认）。
-     * P2 联调时此 key 需同步注册到核心（gateway-key add），当前为本地占位。
-     */
     @Volatile private var cached: String? = null
-
+    @Volatile var currentKeyCached: String = ""
+    @Synchronized
     fun currentKey(filesDir: File): String {
         cached?.let { return it }
-        val f = File(filesDir, "gateway-key.txt")
-        val key = if (f.exists() && f.length() > 0) {
-            f.readText().trim().also {
-                require(cc.fplj.magpiemobile.core.GatewayKeyGenerator.looksValid(it)) { "持久化 key 格式损坏" }
+        val file = File(filesDir, "gateway-key.txt")
+        val key = if (file.exists() && file.length() > 0) {
+            file.readText().trim().also {
+                require(cc.fplj.magpiemobile.core.GatewayKeyGenerator.looksValid(it)) { "本地网关密钥文件格式损坏，请勿将它当成已注册的核心密钥" }
             }
-        } else {
-            cc.fplj.magpiemobile.core.GatewayKeyGenerator.generate().also {
-                f.writeText(it)
-            }
-        }
+        } else cc.fplj.magpiemobile.core.GatewayKeyGenerator.generate().also { file.writeText(it) }
         cached = key
         return key
     }
-
-    /** onCreate 先调用；Composable 内直接读此属性。 */
-    @Volatile var currentKeyCached: String = ""
 }
 
 object ChatSessionHolder {
-    @Volatile private var cached: cc.fplj.magpiemobile.core.StreamingChatSession? = null
-    @Volatile var chatFilePath: String = "/data/local/tmp/magpie-chat.jsonl"
-
+    private var cached: cc.fplj.magpiemobile.core.StreamingChatSession? = null
+    private var cachedConfig: GatewayConfig? = null
+    var chatFilePath: String = ""
+    @Synchronized
     fun get(cfg: GatewayConfig): cc.fplj.magpiemobile.core.StreamingChatSession {
-        val existing = cached
-        if (existing != null) return existing
-        val s = cc.fplj.magpiemobile.core.StreamingChatSession(
-            cc.fplj.magpiemobile.core.StreamingChatClient(cfg),
-            cc.fplj.magpiemobile.core.ChatClient(cfg),
-            cc.fplj.magpiemobile.core.SessionStore(java.io.File(chatFilePath)),
-            defaultModel = "deepseek/deepseek-chat", // P2 从 /v1/models 动态选
-        )
-        cached = s
-        return s
+        if (cachedConfig == cfg) cached?.let { return it }
+        check(chatFilePath.isNotBlank()) { "会话目录尚未初始化" }
+        return cc.fplj.magpiemobile.core.StreamingChatSession(
+            cc.fplj.magpiemobile.core.StreamingChatClient(cfg), cc.fplj.magpiemobile.core.ChatClient(cfg),
+            cc.fplj.magpiemobile.core.SessionStore(File(chatFilePath)), defaultModel = "",
+        ).also { cached = it; cachedConfig = cfg }
     }
 }

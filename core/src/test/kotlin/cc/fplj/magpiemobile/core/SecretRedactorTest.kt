@@ -38,6 +38,13 @@ class SecretRedactorTest {
     }
 
     @Test
+    fun nativeAdminUrlKeyIsMasked() {
+        val out = SecretRedactor.redact("magpie web on http://127.0.0.1:3430/?k=secretAdminLinkValue&x=1")
+        assertTrue(!out.contains("secretAdminLinkValue"))
+        assertTrue(out.contains("x=1"))
+    }
+
+    @Test
     fun cleanTextUnchanged() {
         val clean = "engine exited with code 0, nothing sensitive"
         assertEquals(clean, SecretRedactor.redact(clean))

@@ -1,28 +1,36 @@
-# Magpie-Mobile（P2 界面阶段）
+# Magpie-Mobile（开发验证版）
 
-目标与完整计划见 plan.md。当前：**Compose 原生界面 + GatewayService 前台服务 + 流式聊天**。
+目标与实施范围见 [移植计划](plan.md)。当前是 Compose 原生壳 + APK 预置 Magpie CLI 0.1.3188 / Bun 1.4.2，不依赖 Termux 或 root。不是功能完整的正式版。
 
-## 架构
-- **core/**（纯 JVM，25 组件 105 测试）：管理 API 客户端、网关配置、聊天栈（非流式+流式+SSE 解析+会话+降级）、引擎路径/执行/监督、插件脚本受控安装、凭据脱敏、FGS 策略、载荷自检、密钥生成。
-- **app/**：GatewayService（specialUse FGS，Android 14+ 决策、启动自检、崩溃退避、用户停止不复活）+ Compose 仪表盘（状态头/网关启停/模型目录/流式聊天/诊断/日志）。
-- 载荷：APK 内嵌 `libmagpie_exec.so`（Magpie CLI 0.1.3188）与 `libbun_exec.so`（Bun 1.4.2），经 nativeLibraryDir exec（P0-2 真机已验证）。
-- 上游补丁草稿：patches/ 目录（M1-M5 Go 成文，待 PR）。
+## 网关启动修复：0.1.1-startup-fix
 
-## 构建
-- CI：推送到 main 触发构建，APK 自动发布到 Release v0.0.1-poc。
-- 资产不入库：scripts/fetch-assets.sh 按官方 SHA256 下载校验。
-- 本地构建：Android Studio 打开；需 JDK 17。
+- Service 发布唯一 StateFlow 状态，Compose 按生命周期观察；点击后有立即反馈，后台失败也显示在页面。
+- 默认 3425（网关）与 3430（管理页）均监听、进程仍存活才报告运行中；进程被创建不等于就绪。
+- 首次启动自动创建私有 home/config/cache，清空继承环境后显式注入 XDG、HOME、TMPDIR、预置 MAGPIE_BUN。
+- 长期进程消费双流、有界尾部诊断；输出/错误经凭据脱敏。异常退出与 spawn 异常共用有限恢复（1/2/4秒，最多3次）。
+- 停止取消启动/恢复，迟到进程后台回收，不在 Android 主线程等待5秒；失败清理后不丢最后错误。
+- 通知未授权不被误判为引擎未启动；页面有授权入口，通知提供停止动作。
+- Android HTTP 明文仅对 127.0.0.1 / localhost 放行，外部域名仍禁止。
+- 流式聊天收到 [DONE] 立即结束；断流保留部分但标失败。鉴权/限流/一般错误不自动再次 POST；只有明确 HTTP 405/501 可降级一次。
 
-## P1/P2 真机验收清单
-1. 下载 Release v0.0.1-poc 的 app-debug.apk（91.5MB 级，注意别用缓存的旧 74.7MB 版），覆盖安装。
-2. 打开：Compose 卡片式仪表盘；状态头显示「就绪（网关未运行）」。
-3. 点「启动网关」：出现常驻通知「Magpie 网关运行中」。
-4. 点「停止网关」：通知消失。
-5. 「一键诊断」：magpie 0.1.3188 / bun 1.4.2 exit=0（P0-2 已验证）。
-6. 模型目录/聊天测试在网关未运行时报错属预期（真机联调阶段接核心后可用）。
+## 构建与证据
 
-## 已知边界（P2 进行中）
-- 网关 key 本地生成并持久化（files/gateway-key.txt）；与核心引擎侧对齐（gateway-key add）在真机联调阶段做。
-- 聊天模型从 /v1/models 动态选择（已实现）；首次使用需先点「刷新模型列表」。
-- SSE 流式聊天已实现（增量渲染+自动降级非流式）。
-- Claude 订阅不可用（上游无 Android 构建）；本地 ML 脱敏、RTK、命令型 MCP 暂缓。
+GitHub Actions 执行真实 manifest/security XML 静态检查、core 单测、app JVM 回归与 APK 构建。失败也上传测试报告。
+修复版本发布到带提交短 SHA 的独立公开 Release，并提供 APK、SHA256 和构建信息，避免同名旧缓存。
+JVM 回归覆盖控制器生命周期与状态桥；不等于实体手机 FGS/通知/Compose/Android HTTP 已通过运行验证。
+本机不执行完整编译，完整验证使用 GitHub Actions。
+
+## 手机验收
+
+1. 从最新修复 Release 安装 0.1.1-startup-fix，页面显示版本和构建 SHA。不要用旧 v0.0.1-poc 当修复包。
+2. 点击「启动网关」：先显示正在启动，成功显示本机端口就绪。若失败，状态卡显示具体原因，下方显示引擎输出。
+3. 通知未开启时点「允许通知」；拒绝不隐藏页面错误。
+4. 点击「停止网关」，确认状态停止且端口退出；快速启停、退避期间停止也需要实测。
+5. 如仍失败，发送状态卡和「启动结果与引擎输出」截图/文字。版本输出 exit=0 仅验证载荷可执行，不证明 serve 已运行。
+
+## 尚未完成的集成
+
+- App 持久化的本地 key 并未注册到核心，模型/聊天仍需核心签发密钥与渠道配置；不能声称启动后即可聊天。
+- 上游 M1–M5 目前仅是设计草稿/伪代码，未构成可编译补丁，未应用到固定载荷。见 [补丁草稿](docs/upstream-patches-draft.md)。
+- 默认网关监听地址、loopback 强制鉴权、后台长时存活、多 Android 版本兼容仍需验证。
+- Claude 订阅、本地 ML 脱敏、RTK、命令型 MCP 的限制见实施计划。

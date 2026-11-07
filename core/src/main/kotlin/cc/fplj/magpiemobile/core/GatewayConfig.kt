@@ -23,10 +23,22 @@ data class GatewayConfig(
 ) {
     init {
         require(gatewayKey.isNotBlank()) { "gatewayKey 不得为空：loopback 也必须鉴权（plan.md §4.3）" }
-        require(adminBaseUrl.startsWith("http://127.0.0.1") || adminBaseUrl.startsWith("http://localhost")) {
-            "管理面只允许 loopback 绑定，got $adminBaseUrl"
+        val admin = java.net.URI(adminBaseUrl)
+        require(admin.scheme == "http" && admin.host in setOf("127.0.0.1", "localhost") &&
+            admin.userInfo == null && admin.rawQuery == null && admin.rawFragment == null &&
+            (admin.path.isNullOrEmpty() || admin.path == "/") && (admin.port == -1 || admin.port in 1..65535)) {
+            "管理面只允许 loopback 绑定（精确主机名、无用户信息/路径/查询参数）"
+        }
+        val gateway = java.net.URI(gatewayBaseUrl)
+        require(gateway.scheme in setOf("http", "https") && gateway.host != null &&
+            gateway.userInfo == null && gateway.rawQuery == null && gateway.rawFragment == null &&
+            (gateway.path.isNullOrEmpty() || gateway.path == "/") && (gateway.port == -1 || gateway.port in 1..65535) &&
+            (gateway.scheme == "https" || gateway.host in setOf("127.0.0.1", "localhost"))) {
+            "网关明文仅允许本机 loopback，非本机网关须 HTTPS"
         }
     }
+
+    override fun toString(): String = "GatewayConfig(adminBaseUrl=$adminBaseUrl, gatewayBaseUrl=$gatewayBaseUrl, gatewayKey=<redacted>, adminCookie=<redacted>)"
 
     /** 网关标准模型目录路径（plan.md §4.2：从 /v1/models 读，不内置列表）。 */
     fun modelsPath(): String = "$gatewayBaseUrl/v1/models"

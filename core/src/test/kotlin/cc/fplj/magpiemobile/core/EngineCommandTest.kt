@@ -20,6 +20,7 @@ class EngineCommandTest {
         assertFailsWith<IllegalArgumentException> { EngineCommand.serve(exe, adminPort = 80) }
         assertFailsWith<IllegalArgumentException> { EngineCommand.serve(exe, adminPort = 70000) }
         assertFailsWith<IllegalArgumentException> { EngineCommand.serve(exe, adminPort = 3425) }
+        assertFailsWith<IllegalArgumentException> { EngineCommand.serve(exe, gatewayPort = 4001) }
     }
 
     @Test

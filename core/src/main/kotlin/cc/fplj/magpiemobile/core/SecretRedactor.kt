@@ -22,7 +22,7 @@ object SecretRedactor {
             "Bearer:**" + m.value.takeLast(4)
         }
         // 3) 查询串/配置密钥
-        out = out.replace(Regex("(?i)(password|token|api_key)=([^\\s&]{4,})")) { m ->
+        out = out.replace(Regex("(?i)(password|token|api_key|k)=([^\\s&]{4,})")) { m ->
             m.groupValues[1] + "=**" + m.groupValues[2].takeLast(4)
         }
         // 4) 通用 sk- 密钥（最后，此时文本已无 sk-magpie 触发词）

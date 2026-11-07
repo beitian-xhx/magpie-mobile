@@ -3,89 +3,85 @@ package cc.fplj.magpiemobile
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
-/**
- * P1 第七块（PoC 内）：loopback-only 健康端点。
- *
- * 注意：com.sun.net.httpserver 是 JDK 模块，Android 运行时不含——
- * CI 编译已抓出（v1 教训）。此处用原始 ServerSocket 实现极简 HTTP。
- *
- * 安全（plan.md §4.3）：显式绑定 127.0.0.1（非 0.0.0.0）；无敏感数据；
- * 端口 3431（管理 3430 / 网关 3425 之外的观测端口）。
- */
-class HealthServer(
-    private val infoProvider: () -> Map<String, String>,
-    private val port: Int = 3431,
-) {
+/** Local observation only; loopback is NOT a root-only permission boundary. No credentials returned. */
+class HealthServer(private val infoProvider: () -> Map<String, String>, private val port: Int = 3431) {
     private var socket: ServerSocket? = null
-    private var executor: java.util.concurrent.ExecutorService? = null
-    private var worker: Thread? = null
+    private var executor: ThreadPoolExecutor? = null
+    private val clients = ConcurrentHashMap.newKeySet<Socket>()
 
-    @Synchronized
-    fun start() {
+    @Synchronized fun start() {
         check(socket == null) { "HealthServer 已启动" }
-        val ss = ServerSocket()
-        ss.reuseAddress = true
-        ss.bind(InetSocketAddress("127.0.0.1", port), 8)
-        socket = ss
-        val ex = Executors.newSingleThreadExecutor()
-        executor = ex
-        worker = Thread {
-            while (!ss.isClosed) {
+        val server = ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress("127.0.0.1", port), 8) }
+        val pool = ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(8),
+            { task -> Thread(task, "MagpieHealthClient").apply { isDaemon = true } })
+        socket = server; executor = pool
+        Thread({
+            while (!server.isClosed) {
                 try {
-                    val client = ss.accept()
-                    ex.execute { handle(client) }
-                } catch (_: Exception) {
-                    break // socket closed
-                }
+                    val client = server.accept()
+                    clients.add(client)
+                    try { pool.execute { handle(client) } }
+                    catch (_: java.util.concurrent.RejectedExecutionException) { clients.remove(client); client.close() }
+                } catch (_: Exception) { break }
             }
-        }.also { it.isDaemon = true; it.start() }
+        }, "MagpieHealthAccept").apply { isDaemon = true; start() }
     }
 
+    val boundPort: Int @Synchronized get() = socket?.localPort ?: -1
+    val isRunning: Boolean @Synchronized get() = socket?.isClosed == false
+
     private fun handle(client: Socket) {
-        client.use { c ->
-            try {
-                c.soTimeout = 3000
-                val reader = c.getInputStream().bufferedReader()
-                val requestLine = reader.readLine() ?: return
-                // 消费请求头（极简实现：不需要请求体）
-                while (reader.readLine()?.isNotEmpty() == true) { /* drain */ }
-                val body = buildString {
-                    append("{")
-                    infoProvider().entries.forEachIndexed { i, (k, v) ->
-                        if (i > 0) append(",")
-                        append("\"").append(k.escape()).append("\":\"").append(v.escape()).append("\"")
-                    }
-                    append("}")
+        try {
+            client.use { connection ->
+                val head = StringBuilder()
+                val input = connection.getInputStream()
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+                while (!head.endsWith("\r\n\r\n")) {
+                    val remaining = deadline - System.nanoTime()
+                    if (remaining <= 0 || head.length >= 8192) return
+                    connection.soTimeout = TimeUnit.NANOSECONDS.toMillis(remaining).toInt().coerceAtLeast(1)
+                    val byte = input.read()
+                    if (byte < 0) return
+                    head.append(byte.toChar())
                 }
+                val valid = head.toString().substringBefore("\r\n").split(' ').let {
+                    it.size == 3 && it[0] == "GET" && it[1] == "/healthz"
+                }
+                val body = if (valid) infoProvider().entries.joinToString(",", "{", "}") {
+                    "\"" + escape(it.key) + "\":\"" + escape(it.value) + "\""
+                } else "{}"
                 val bytes = body.toByteArray(Charsets.UTF_8)
-                val head = "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: application/json\r\n" +
-                    "Content-Length: " + bytes.size + "\r\n" +
-                    "Connection: close\r\n\r\n"
-                c.getOutputStream().apply {
-                    write(head.toByteArray(Charsets.UTF_8))
-                    write(bytes)
-                    flush()
-                }
-            } catch (_: Exception) {
-                // 客户端断开等——观测端点，不打扰主流程
+                val header = "HTTP/1.1 " + (if (valid) "200 OK" else "404 Not Found") + "\r\n" +
+                    "Content-Type: application/json\r\nContent-Length: " + bytes.size + "\r\nConnection: close\r\n\r\n"
+                connection.getOutputStream().apply { write(header.toByteArray()); write(bytes); flush() }
+            }
+        } catch (_: Exception) {
+            // Failed or slow observation must not affect gateway startup.
+        } finally { clients.remove(client); try { client.close() } catch (_: Exception) {} }
+    }
+
+    @Synchronized fun stop() {
+        try { socket?.close() } catch (_: Exception) {}
+        socket = null
+        executor?.shutdownNow(); executor = null
+        clients.forEach { try { it.close() } catch (_: Exception) {} }; clients.clear()
+    }
+
+    private fun escape(value: String): String = buildString {
+        value.forEach { c ->
+            when (c) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (c.code < 32) append("\\u" + c.code.toString(16).padStart(4, '0')) else append(c)
             }
         }
     }
-
-    @Synchronized
-    fun stop() {
-        try { socket?.close() } catch (_: Exception) {}
-        socket = null
-        executor?.shutdownNow()
-        executor = null
-        worker = null
-    }
-
-    val isRunning: Boolean
-        @Synchronized get() = socket != null && !socket!!.isClosed
-
-    private fun String.escape(): String = filter { it != '"' && it != '\\' }
 }

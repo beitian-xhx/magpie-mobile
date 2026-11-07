@@ -21,6 +21,7 @@ object EngineCommand {
     ): List<String> {
         require(magpieExecutablePath.startsWith("/")) { "载荷路径必须绝对" }
         require(adminPort in 1024..65535 && gatewayPort in 1024..65535) { "端口超出范围" }
+        require(gatewayPort == DEFAULT_GATEWAY_PORT) { "当前载荷不支持通过 serve 参数修改网关端口，请勿静默忽略自定义端口" }
         require(adminPort != gatewayPort) { "管理端口与网关端口不得相同" }
         // 移动版固定 loopback --web：管理面不上 LAN（M3 补丁的上游前提）
         return listOf(magpieExecutablePath, "serve", "--web=127.0.0.1:$adminPort")

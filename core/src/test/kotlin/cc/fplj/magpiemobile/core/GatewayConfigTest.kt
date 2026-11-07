@@ -31,6 +31,19 @@ class GatewayConfigTest {
     }
 
     @Test
+    fun rejectsLoopbackPrefixSpoofing() {
+        for (url in listOf("http://127.0.0.1@evil.example:3430", "http://localhost.evil.example:3430", "http://127.0.0.10:3430")) {
+            assertFailsWith<IllegalArgumentException> { GatewayConfig(gatewayKey = "k", adminBaseUrl = url) }
+        }
+    }
+
+    @Test
+    fun configStringDoesNotExposeCredentials() {
+        val text = GatewayConfig(gatewayKey = "privateGatewayValue", adminCookie = "privateCookieValue").toString()
+        assertTrue(!text.contains("privateGatewayValue") && !text.contains("privateCookieValue"))
+    }
+
+    @Test
     fun endpointPathsFollowContract() {
         val c = GatewayConfig(gatewayKey = "k")
         assertEquals("http://127.0.0.1:3425/v1/models", c.modelsPath())

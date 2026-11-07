@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: magpie-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,11 +26,26 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Check actual startup manifest contract
+        run: python3 scripts/check-startup-contract.py
+
       - name: Fetch verified engine assets
         run: bash scripts/fetch-assets.sh
 
-      - name: Run core contract tests
-        run: gradle :core:test --no-daemon --stacktrace
+      - name: Run core and app JVM regression tests
+        run: gradle :core:test :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Upload regression reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-reports-${{ github.sha }}
+          path: |
+            core/build/test-results/test/
+            core/build/reports/tests/test/
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
 
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
@@ -42,6 +61,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum app/build/outputs/apk/debug/app-debug.apk
-          gh release create v0.0.1-poc --title "P0-2 PoC APK" --notes "P0-2 verification APK (auto-published by CI)" --target "$GITHUB_SHA" || true
-          gh release upload v0.0.1-poc app/build/outputs/apk/debug/app-debug.apk --clobber
+          set -euo pipefail
+          tag="v0.1.1-startup-fix-${GITHUB_SHA:0:8}"
+          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.1-startup-fix.apk
+          sha256sum magpie-mobile-0.1.1-startup-fix.apk | tee magpie-mobile-0.1.1-startup-fix.apk.sha256
+          printf "Commit: %s\nActions run: %s/%s/actions/runs/%s\n" "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "0.1.1 网关启动修复 (${GITHUB_SHA:0:8})" --notes "修复服务/界面状态断线、启动输出丢失、无限恢复与停止竞态。JVM 回归和 APK 编译由 CI 验证；实体手机 FGS/网关启停仍需安装后确认。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
+          fi
+          gh release upload "$tag" magpie-mobile-0.1.1-startup-fix.apk magpie-mobile-0.1.1-startup-fix.apk.sha256 build-info.txt --clobber
