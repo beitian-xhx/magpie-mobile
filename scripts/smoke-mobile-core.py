@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Host-only core integration: no provider secret, subscription or model inference."""
-import argparse,json,os,secrets,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error
+import argparse,json,os,secrets,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error,http.server
 from pathlib import Path
 
 def port():
@@ -30,6 +30,23 @@ exe=Path(opts.exe).resolve();assert exe.is_file()
 with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
     root=Path(temporary)
     for directory in ['config','cache','tmp']: (root/directory).mkdir()
+    vendor_calls={'get':0,'post':0}
+    vendor_key='synthetic-provider-key-never-real'
+    class Vendor(http.server.BaseHTTPRequestHandler):
+        def log_message(self,*args): pass
+        def do_GET(self):
+            vendor_calls['get']+=1
+            if self.headers.get('Authorization')!='Bearer '+vendor_key:
+                self.send_response(401);self.end_headers();return
+            if self.path not in ['/models','/v1/models']:
+                self.send_response(404);self.end_headers();return
+            body=json.dumps({'data':[{'id':'probe-model','name':'Probe model'}]}).encode()
+            self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+        def do_POST(self):
+            vendor_calls['post']+=1;self.send_response(500);self.end_headers()
+    vendor=http.server.ThreadingHTTPServer(('127.0.0.1',0),Vendor)
+    threading.Thread(target=vendor.serve_forever,daemon=True).start()
+    vendor_base='http://127.0.0.1:'+str(vendor.server_port)
     admin_port,gateway_port=port(),port()
     while admin_port==gateway_port: gateway_port=port()
     admin_key=secrets.token_hex(32)
@@ -59,9 +76,9 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
             time.sleep(.1)
         else: raise AssertionError('authenticated management never became ready')
         cap=json.loads(body)
-        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3188-mobile.2','mobile':True,
+        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3188-mobile.3','mobile':True,
                      'loopbackKeys':True,'debugEndpoints':False,'adminLoopbackOnly':True,'nativeAutoUpdate':False,
-                     'providerSchemaVersion':1,'providerManagement':True}
+                     'providerSchemaVersion':1,'providerManagement':True,'providerModelDiscovery':True}
         assert request(admin,'/api/mobile/capabilities')[0]==401
         assert request(gateway,'/api/hello')[0]==401
         assert request(gateway,'/v1/models',headers={'Authorization':'Bearer magpie'})[0]==401
@@ -77,7 +94,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         own_id=own[0]['id']
         auth={'Authorization':'Bearer '+secret}
         code,body=request(gateway,'/api/hello',headers=auth)
-        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3188-mobile.2'}
+        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3188-mobile.3'}
         assert request(gateway,'/v1/magpie/goroutines',headers=auth)[0]==404
         assert request(gateway,'/v1/magpie/heap',headers=auth)[0]==404
         assert request(admin,'/api/window/restart','POST',{},cookie)[0]==404
@@ -88,8 +105,10 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         assert code==200 and json.loads(body)['secret']==secret
         # Safe provider persistence using synthetic credentials and a reserved local URL.
         # No provider/test/detect or authenticated chat is called here.
-        vendor_key='synthetic-provider-key-never-real'
-        draft={'new':True,'id':'host-provider','name':'Host provider','chat':'https://provider.invalid/v1',
+        code,body=request(admin,'/api/mobile/providers/models','POST',{'chat':vendor_base+'/v1','key':vendor_key},cookie)
+        assert code==200 and json.loads(body)['models'][0]['id']=='probe-model'
+        assert request(admin,'/api/mobile/providers/models','POST',{'chat':vendor_base+'/v1'},cookie)[0]==401
+        draft={'new':True,'id':'host-provider','name':'Host provider','chat':vendor_base+'/v1',
                'key':vendor_key,'models':['probe-model'],'noModels':False}
         assert request(admin,'/api/mobile/providers/create','POST',draft)[0]==401
         code,body=request(admin,'/api/mobile/providers/create','POST',draft,cookie)
@@ -97,6 +116,11 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         provider=json.loads(body)
         assert provider['id']=='host-provider' and provider['key']['set'] and vendor_key not in body.decode()
         original_revision=provider['revision']
+        code,body=request(admin,'/api/mobile/providers/models','POST',{'chat':vendor_base+'/v1/chat/completions','id':'host-provider','revision':original_revision},cookie)
+        assert code==200 and json.loads(body)['models'][0]['id']=='probe-model'
+        code,body=request(admin,'/api/mobile/providers/editable/host-provider',headers=cookie)
+        assert code==200 and json.loads(body)['revision']==original_revision, 'discovery must not save or modify revision'
+        assert vendor_calls['post']==0, 'metadata discovery cannot call inference'
         code,body=request(admin,'/api/mobile/providers/editable/host-provider',headers=cookie)
         assert code==200 and json.loads(body)['revision']==original_revision
         code,body=request(admin,'/api/mobile/providers/edit','POST',
@@ -121,6 +145,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         passed=True
         print('PASS: host serve startup, strict key/cookie auth, core-issued key/copy, safe provider create/edit/revision, debug denial, safe CLI output and stop; no inference')
     finally:
+        vendor.shutdown();vendor.server_close()
         if p.poll() is None:
             p.kill();p.wait(timeout=5)
         if not passed:

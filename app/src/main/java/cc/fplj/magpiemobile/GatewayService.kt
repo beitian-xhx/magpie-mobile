@@ -54,8 +54,8 @@ class GatewayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            GatewayRuntime.stoppedWithoutService()
+        if (intent?.action == ACTION_STOP || GatewayRuntime.mustStop()) {
+            GatewayRuntime.requestStop()
             controller?.stop()
             stopSelf()
             return START_NOT_STICKY
@@ -130,8 +130,18 @@ class GatewayService : Service() {
 
     override fun onDestroy() {
         // Preserve startup failures on screen; stopping a failed service must not overwrite FAILED.
-        controller?.stop()
+        val stoppedController = controller
+        stoppedController?.stop()
         NativeCoreSession.disconnect(owner)
+        val stoppedOwner = owner
+        Thread({
+            if (stoppedController == null || stoppedController.awaitStopped(6000)) GatewayRuntime.cleanupCompleted(stoppedOwner)
+            else {
+                // Keep restart disabled until the owned worker has actually finished.
+                while (!stoppedController.awaitStopped(6000)) { if (!GatewayRuntime.isCurrent(stoppedOwner)) return@Thread }
+                GatewayRuntime.cleanupCompleted(stoppedOwner)
+            }
+        }, "MagpieStopCleanup").apply { isDaemon = true; start() }
         foregroundReady = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()

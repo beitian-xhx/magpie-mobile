@@ -25,8 +25,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,16 +98,16 @@ class MainActivity : ComponentActivity() {
                         onAllowNotifications = ::allowNotifications,
                         onRetryCoreConnection = { NativeCoreSession.retry(filesDir) },
                         onStartGateway = {
-                            GatewayRuntime.requestStart()
-                            try {
-                                ContextCompat.startForegroundService(this, Intent(this, GatewayService::class.java))
-                            } catch (e: Exception) { GatewayRuntime.requestFailed(e) }
+                            if (GatewayRuntime.requestStart()) {
+                                try { ContextCompat.startForegroundService(this, Intent(this, GatewayService::class.java)) }
+                                catch (e: Exception) { GatewayRuntime.requestFailed(e) }
+                            }
                         },
                         onStopGateway = {
                             try {
                                 // Invalidate callbacks from this run before destruction/late spawn cleanup.
-                                GatewayRuntime.stoppedWithoutService()
-                                stopService(Intent(this, GatewayService::class.java))
+                                val ticket = GatewayRuntime.requestStop()
+                                if (!stopService(Intent(this, GatewayService::class.java))) GatewayRuntime.cleanupCompleted(ticket)
                             } catch (e: Exception) { GatewayRuntime.requestFailed(e) }
                         },
                     )
@@ -132,10 +134,11 @@ fun Dashboard(
     val scope = rememberCoroutineScope()
     val gateway by GatewayRuntime.status.collectAsStateWithLifecycle()
     val coreSession by NativeCoreSession.status.collectAsStateWithLifecycle()
-    val active = gateway.phase in setOf(GatewayEngineController.Phase.STARTING,
+    val stopping by GatewayRuntime.stopping.collectAsStateWithLifecycle()
+    val active = stopping || gateway.phase in setOf(GatewayEngineController.Phase.STARTING,
         GatewayEngineController.Phase.RUNNING, GatewayEngineController.Phase.BACKOFF)
     val running = gateway.phase == GatewayEngineController.Phase.RUNNING
-    val clientReady = running && coreSession.ready
+    val clientReady = running && !stopping && coreSession.ready
     var log by remember { mutableStateOf("") }
     var modelsText by remember { mutableStateOf("（未加载）") }
     var modelIds by remember { mutableStateOf(emptyList<String>()) }
@@ -145,8 +148,38 @@ fun Dashboard(
     var chatInput by remember { mutableStateOf("") }
     var chatOut by remember { mutableStateOf("") }
     var modelMenu by remember { mutableStateOf(false) }
+    var providerBusy by remember { mutableStateOf(false) }
+    var catalogRevision by remember { mutableStateOf(0) }
+    var catalogRequest by remember { mutableStateOf(0L) }
+    var initialCatalog by remember { mutableStateOf(true) }
+    var catalogValid by remember { mutableStateOf(false) }
+    var modelLabels by remember { mutableStateOf(emptyMap<String, String>()) }
     fun append(text: String) { log = (log + "\n" + SecretRedactor.redact(text)).takeLast(8192) }
 
+    val modelOwner = if (clientReady) NativeCoreSession.providerSessionId() else null
+    LaunchedEffect(clientReady, modelOwner, catalogRevision) {
+        val request = ++catalogRequest
+        catalogValid = false
+        if (!clientReady || modelOwner == null) { loadingModels = false; return@LaunchedEffect }
+        loadingModels = true
+        try {
+            val entries = withContext(Dispatchers.IO) { ModelsClient(NativeCoreSession.gatewayConfig()).list() }
+            if (request == catalogRequest && modelOwner == NativeCoreSession.providerSessionId()) {
+                val old = selectedModel
+                modelIds = entries.map { it.id }
+                modelLabels = entries.associate { it.id to (it.displayName?.takeIf(String::isNotBlank) ?: it.id) }
+                if (old.isNotBlank() && old !in modelIds) {
+                    selectedModel = ""; modelsText = "之前选择的模型已不可用，请重新选择。"
+                } else {
+                    if (old.isBlank() && initialCatalog) selectedModel = modelIds.firstOrNull().orEmpty()
+                    modelsText = if (modelIds.isEmpty()) "没有已配置模型，请添加提供商" else "可选模型 " + modelIds.size
+                }
+                initialCatalog = false; catalogValid = true
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { if (request == catalogRequest) modelsText = "模型目录读取失败，缓存未确认；请点击刷新重试。" }
+        finally { if (request == catalogRequest) loadingModels = false }
+    }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -155,7 +188,7 @@ fun Dashboard(
         Text("版本 " + BuildConfig.VERSION_NAME + " · " + BuildConfig.GIT_SHA, style = MaterialTheme.typography.bodySmall)
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(when (gateway.phase) {
+                Text(if (stopping) "正在停止并回收进程…" else when (gateway.phase) {
                     GatewayEngineController.Phase.STOPPED -> "网关未运行"
                     GatewayEngineController.Phase.STARTING -> "正在启动…"
                     GatewayEngineController.Phase.RUNNING -> "运行中（本机端口已就绪）"
@@ -171,7 +204,7 @@ fun Dashboard(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = !active, onClick = { append("已点击启动网关"); onStartGateway() }) { Text("启动网关") }
-            Button(enabled = active, onClick = { append("已请求停止网关"); onStopGateway() }) { Text("停止网关") }
+            Button(enabled = active && !stopping, onClick = { append("已请求停止网关"); onStopGateway() }) { Text("停止网关") }
         }
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -183,48 +216,33 @@ fun Dashboard(
                 Text("管理凭据仅留在进程内；客户端密钥由核心签发并私有保存。连接成功不代表已配置 API 渠道。", style = MaterialTheme.typography.bodySmall)
             }
         }
-        ProvidersPanel(enabled = clientReady && !sending, onProvidersChanged = {
-            modelIds = emptyList(); selectedModel = ""; modelsText = "配置已更新，请刷新模型目录"
-            ChatSessionHolder.invalidate()
-        })
+        ProvidersPanel(enabled = clientReady, operationBusy = sending, onBusyChanged = { providerBusy = it }, onProvidersChanged = { catalogValid = false; catalogRevision++ })
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("模型目录", style = MaterialTheme.typography.titleSmall)
-                Button(enabled = clientReady && !loadingModels && !sending, onClick = {
-                    loadingModels = true
-                    scope.launch {
-                        try {
-                            val cfg = NativeCoreSession.gatewayConfig()
-                            val models = withContext(Dispatchers.IO) { ModelsClient(cfg).list() }
-                            modelIds = models.map { it.id }
-                            if (selectedModel !in modelIds) selectedModel = modelIds.firstOrNull().orEmpty()
-                            modelsText = if (modelIds.isEmpty()) "核心没有可用模型，请先配置渠道/账号" else modelIds.take(8).joinToString("\n")
-                        } catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { modelsText = "读取失败：" + SecretRedactor.redact(e.message ?: e.javaClass.simpleName) }
-                        finally { loadingModels = false }
-                    }
-                }) { Text(if (loadingModels) "读取中…" else "刷新模型列表") }
+                Button(enabled = clientReady && !loadingModels && !sending, onClick = { catalogRevision++ }) { Text(if (loadingModels) "读取中…" else "刷新模型列表") }
                 Text(if (clientReady) modelsText else "请先完成核心安全连接；端口就绪不代表已配置渠道和核心密钥", style = MaterialTheme.typography.bodySmall)
             }
         }
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("聊天测试（流式）", style = MaterialTheme.typography.titleSmall)
+                Text("上下文会发送给当前模型；实际发送可能消耗渠道额度。", style = MaterialTheme.typography.bodySmall)
+                TextButton(enabled = !sending && !providerBusy, onClick = { ChatSessionHolder.newConversation(); chatOut = "" }) { Text("新会话（清空上下文）") }
                 Button(enabled = modelIds.isNotEmpty() && !sending, onClick = { modelMenu = true }) {
-                    Text(if (selectedModel.isBlank()) "请选择模型" else selectedModel)
+                    Text(if (selectedModel.isBlank()) "请选择模型" else modelLabels[selectedModel] ?: selectedModel)
                 }
                 DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
                     modelIds.forEach { id ->
-                        DropdownMenuItem(text = { Text(id) }, onClick = { selectedModel = id; modelMenu = false })
+                        DropdownMenuItem(text = { Column { Text(modelLabels[id] ?: id); if (modelLabels[id] != id) Text(id, style = MaterialTheme.typography.bodySmall) } }, onClick = { selectedModel = id; modelMenu = false })
                     }
                 }
                 OutlinedTextField(value = chatInput, onValueChange = { chatInput = it }, enabled = !sending,
                     modifier = Modifier.fillMaxWidth(), placeholder = { Text("输入消息…") })
-                Button(enabled = clientReady && !sending && chatInput.isNotBlank() && selectedModel in modelIds, onClick = {
+                Button(enabled = clientReady && catalogValid && !providerBusy && !sending && chatInput.isNotBlank() && selectedModel in modelIds, onClick = {
                     val text = chatInput
                     val model = selectedModel
                     sending = true
-                    chatInput = ""
                     chatOut = ""
                     scope.launch {
                         val deltas = Channel<String>(Channel.UNLIMITED)
@@ -235,10 +253,16 @@ fun Dashboard(
                             val reply = withContext(Dispatchers.IO) { session.send(text, model) { delta -> deltas.trySend(delta) } }
                             deltas.close(); render.join() // flush all deltas before final text; no delayed Handler replay
                             chatOut = reply
+                            chatInput = "" // clear only after successful reply; failed messages remain editable
                         } catch (e: CancellationException) { throw e }
                         catch (e: Exception) {
                             deltas.close(); render.join()
-                            chatOut += "\n发送失败（未自动重复发送）：" + SecretRedactor.redact(e.message ?: e.javaClass.simpleName)
+                            val status = when (e) {
+                                is cc.fplj.magpiemobile.core.ChatException -> "HTTP " + e.httpCode
+                                is cc.fplj.magpiemobile.core.StreamingChatException -> e.httpCode?.let { "HTTP " + it } ?: "网络或流式中断"
+                                else -> "请求未能完成"
+                            }
+                            chatOut += "\n发送失败（" + status + "），草稿已保留；未自动重发。请检查凭据/额度/网络后手动发送。"
                         } finally { deltas.close(); render.cancel(); sending = false }
                     }
                 }) { Text(if (sending) "发送中…" else "发送") }
@@ -282,6 +306,9 @@ object ChatSessionHolder {
     var chatFilePath: String = ""
     @Synchronized
     fun invalidate() { cached = null; cachedConfig = null }
+
+    @Synchronized
+    fun newConversation() { cached?.reset() }
 
     @Synchronized
     fun get(cfg: GatewayConfig): cc.fplj.magpiemobile.core.StreamingChatSession {

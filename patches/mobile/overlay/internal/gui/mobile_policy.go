@@ -63,7 +63,8 @@ func mobileAPI(next http.Handler) http.Handler {
 					NativeAutoUpdate bool   `json:"nativeAutoUpdate"`
 					ProviderSchemaVersion int `json:"providerSchemaVersion"`
 					ProviderManagement bool `json:"providerManagement"`
-				}{1, Version, true, true, false, true, false, 1, true})
+					ProviderModelDiscovery bool `json:"providerModelDiscovery"`
+				}{1, Version, true, true, false, true, false, 1, true, true})
 				return
 			}
 			if mobileProviderServe(w, r) { return }

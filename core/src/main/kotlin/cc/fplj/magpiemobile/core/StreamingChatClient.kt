@@ -8,10 +8,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * 流式聊天的 HTTP 层；真实 SSE 事件语义交给既有 SseChatParser。
+ * 流式聊天的 HTTP 层；SSE 事件语义交给 SseChatParser。
  *
- * 只有收到 [DONE] 才成功；EOF/IO/SSE 错误保留增量并以失败上抛，不自动重发。
- * 非 2xx 状态在读取任何成功响应增量之前抛 ChatException，供会话严格判断降级。
+ * 只有收到 [DONE] 才成功；EOF/IO/SSE/回调错误保留增量并安全上抛，不自动重发。
+ * 仅真正的非 2xx HTTP 响应抛 ChatException；回调不得伪造不支持流式的状态。
  */
 class StreamingChatClient(private val config: GatewayConfig) {
 
@@ -55,37 +55,47 @@ class StreamingChatClient(private val config: GatewayConfig) {
             }
             val mediaType = connection.contentType?.substringBefore(';')?.trim()
             if (!mediaType.equals("text/event-stream", ignoreCase = true)) {
-                throw StreamingChatException("stream -> expected text/event-stream", parser.fullText(), code)
+                throw StreamingChatException(StreamingChatFailure.UNEXPECTED_CONTENT_TYPE, parser.fullText(), code)
             }
             try {
                 connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                     while (true) {
                         val line = reader.readLine()
-                            ?: throw StreamingChatException("stream -> EOF before [DONE]", parser.fullText(), code)
+                            ?: throw StreamingChatException(StreamingChatFailure.EOF_BEFORE_DONE, parser.fullText(), code)
                         // 必须先判断 DONE 再读下一行；长连接不需要关闭才算完成。
                         if (parser.feedLine(line)) break
                     }
                 }
-            } catch (e: ChatException) {
-                // SSE error 或增量回调错误不是“不支持流式”，即使其 code=405/501 也不能重发。
-                val safeMessage = SecretRedactor.redact(
-                    (e.message ?: "stream -> SSE error").replace(config.gatewayKey, "[redacted]"))
-                throw StreamingChatException(safeMessage, parser.fullText(), code, e)
+            } catch (_: ChatException) {
+                // SSE error 不属于 HTTP 405/501；不保留原始 JSON/message/cause。
+                throw StreamingChatException(StreamingChatFailure.SSE_ERROR, parser.fullText(), code)
+            } catch (e: StreamingChatException) {
+                // parser 的回调失败使用真实响应 code，不采用回调自报的 HTTP 状态。
+                throw StreamingChatException(e.failure, parser.fullText(), code)
             }
             return parser.fullText()
-        } catch (e: IOException) {
-            throw StreamingChatException("stream -> I/O failure: " + e.javaClass.simpleName,
-                parser.fullText(), httpCode, e)
+        } catch (_: IOException) {
+            // Throwable cause/类型名也可能夹带自由文本，安全边界只保留固定分类。
+            throw StreamingChatException(StreamingChatFailure.IO_FAILURE, parser.fullText(), httpCode)
         } finally {
             conn?.disconnect()
         }
     }
 }
 
-/** ChatException 是 final；独立异常保留失败回答，调用方不得当作成功 assistant。 */
+/** 固定异常分类；不得将上游 message、JSON、provider key 或原始 cause 加入诊断。 */
+enum class StreamingChatFailure(val safeMessage: String) {
+    SSE_ERROR("Stream SSE error"),
+    CALLBACK_FAILURE("Stream callback failure"),
+    IO_FAILURE("Stream I/O failure"),
+    EOF_BEFORE_DONE("Stream EOF before [DONE]"),
+    UNEXPECTED_CONTENT_TYPE("Stream expected text/event-stream"),
+    CHAT_FAILURE("Chat failed"),
+}
+
+/** 失败回答只留在内存供 UI 展示；异常 message/日志不包含 partialText 或原始 cause。 */
 class StreamingChatException(
-    message: String,
+    val failure: StreamingChatFailure,
     val partialText: String,
     val httpCode: Int? = null,
-    cause: Throwable? = null,
-) : RuntimeException(message, cause)
+) : RuntimeException(failure.safeMessage)

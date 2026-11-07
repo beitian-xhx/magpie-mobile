@@ -1,16 +1,14 @@
 package cc.fplj.magpiemobile.core
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * SSE 流式聊天解析器（plan.md §3 聊天测试「流式」的纯协议层，无 HTTP/Android 依赖）。
  *
  * 输入：按行送入 OpenAI Chat Completions SSE（data: {...} / data: [DONE] / 空行分隔）。
  * 输出：每个含增量内容的 data 事件回调 onDelta；[DONE] 结束返回完整拼接文本。
- * 规则（plan.md §5）：错误事件原样上抛；半行/断流由调用方决定保留部分内容。
+ * 错误事件只上抛固定安全分类，不携带上游自由文本/JSON；失败保留已收增量。
  */
 class SseChatParser(
     private val onDelta: (String) -> Unit,
@@ -28,7 +26,13 @@ class SseChatParser(
         val delta = extractDelta(payload)
         if (delta != null) {
             sb.append(delta)
-            onDelta(delta)
+            try {
+                onDelta(delta)
+            } catch (_: Exception) {
+                // 回调的异常/HTTP code 不属于服务端响应，不得伪造 405/501 触发重放。
+                // 不保留原始 cause，避免 UI 或异常日志泄漏任意形状凭据。
+                throw StreamingChatException(StreamingChatFailure.CALLBACK_FAILURE, fullText())
+            }
         }
         return false
     }
@@ -39,7 +43,8 @@ class SseChatParser(
     private fun extractDelta(dataPayload: String): String? = try {
         val root = json.parseToJsonElement(dataPayload).jsonObject
         if (root["error"] != null) {
-            throw ChatException("SSE error event: " + root["error"].toString(), 200)
+            // 不提取 raw message/code/type：任意字符串字段都可能是渠道 API key。
+            throw ChatException(StreamingChatFailure.SSE_ERROR.safeMessage, 200)
         }
         val choices = root["choices"] as? kotlinx.serialization.json.JsonArray
         val choice0 = choices?.firstOrNull()?.jsonObject

@@ -22,6 +22,7 @@ class ProviderManagementClient(
     private val endpoint = LoopbackEndpoint(baseUrl)
     private val transport: BoundedCoreHttp
     @Volatile private var providerCapabilitiesVerified = false
+    @Volatile private var modelDiscoverySupported = false
     @Volatile private var observedFileError = false
     init {
         require(endpoint.port != 3425) { "管理 cookie 不得发送到网关" }
@@ -43,27 +44,95 @@ class ProviderManagementClient(
         return readSafe { parseEditable(body).also { if (it.id != id) throw ManagementProtocolException() } }
     }
 
-    fun create(draft: ProviderCreateDraft): ProviderEditSnapshot = try {
-        if (observedFileError) throw ProviderConfigurationUnreadableException()
-        val requestBody = draft.submissionBody()
-        val submittedKey = (requestBody["key"] as? JsonPrimitive)?.content
-        val body = requestBody.toString().toByteArray(Charsets.UTF_8)
-        require(body.size <= MAX_REQUEST_BYTES) { "提供商请求超过安全上限" }
-        ensureProviderCapabilities()
-        val reply = request("POST", "/api/mobile/providers/create", body)
-        writeSafe { parseEditable(reply, listOfNotNull(submittedKey)).also { if (it.id != draft.id || !it.keySet) throw ManagementProtocolException() } }
-    } finally { draft.clearSecret() }
+    fun create(draft: ProviderCreateDraft): ProviderEditSnapshot {
+        var writeAttempted = false
+        try {
+            if (observedFileError) throw ProviderConfigurationUnreadableException()
+            require(draft.requestBody().toString().toByteArray(Charsets.UTF_8).size <= MAX_REQUEST_BYTES) { "提供商请求超过安全上限" }
+            ensureProviderCapabilities()
+            val requestBody = draft.submissionBody() // consume only after non-writing validation
+            val submittedKey = (requestBody["key"] as? JsonPrimitive)?.content
+            val body = requestBody.toString().toByteArray(Charsets.UTF_8)
+            writeAttempted = true
+            val reply = request("POST", "/api/mobile/providers/create", body)
+            return writeSafe { parseEditable(reply, listOfNotNull(submittedKey)).also { if (it.id != draft.id || !it.keySet) throw ManagementProtocolException() } }
+        } finally { if (writeAttempted) draft.clearSecret() }
+    }
 
-    fun edit(draft: ProviderEditDraft): ProviderEditSnapshot = try {
-        if (observedFileError) throw ProviderConfigurationUnreadableException()
-        val requestBody = draft.submissionBody()
+    fun edit(draft: ProviderEditDraft): ProviderEditSnapshot {
+        var writeAttempted = false
+        try {
+            if (observedFileError) throw ProviderConfigurationUnreadableException()
+            require(draft.requestBody().toString().toByteArray(Charsets.UTF_8).size <= MAX_REQUEST_BYTES) { "提供商请求超过安全上限" }
+            ensureProviderCapabilities()
+            val requestBody = draft.submissionBody()
+            val submittedKey = (requestBody["key"] as? JsonPrimitive)?.content
+            val body = requestBody.toString().toByteArray(Charsets.UTF_8)
+            writeAttempted = true
+            val reply = request("POST", "/api/mobile/providers/edit", body)
+            return writeSafe { parseEditable(reply, listOfNotNull(submittedKey)).also { if (it.id != draft.snapshot.id) throw ManagementProtocolException() } }
+        } finally { if (writeAttempted) draft.clearSecret() }
+    }
+
+    /** Read-only RPC: the core makes GET models, never a vendor POST or a config write.
+     * No retries. A read failure is a discovery error, not an unknown write/recovery event.
+     */
+    fun discoverModels(discovery: ProviderModelDiscoveryRequest): ProviderModelCatalog = try {
+        val requestBody = discovery.requestBody()
         val submittedKey = (requestBody["key"] as? JsonPrimitive)?.content
         val body = requestBody.toString().toByteArray(Charsets.UTF_8)
-        require(body.size <= MAX_REQUEST_BYTES) { "提供商请求超过安全上限" }
+        require(body.size <= MAX_REQUEST_BYTES) { "模型目录请求超过安全上限" }
         ensureProviderCapabilities()
-        val reply = request("POST", "/api/mobile/providers/edit", body)
-        writeSafe { parseEditable(reply, listOfNotNull(submittedKey)).also { if (it.id != draft.snapshot.id) throw ManagementProtocolException() } }
-    } finally { draft.clearSecret() }
+        if (!modelDiscoverySupported) throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.UNSUPPORTED)
+        val reply = transport.request("POST", "/api/mobile/providers/models", body)
+        try { parseCatalog(reply, discovery, listOfNotNull(submittedKey)) } catch (_: Exception) {
+            throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.INVALID_RESPONSE)
+        }
+    } catch (error: ProviderModelDiscoveryException) {
+        throw error
+    } catch (error: ManagementHttpException) {
+        val kind = when (error.httpCode) {
+            401, 403 -> ProviderModelDiscoveryFailure.KEY_OR_PERMISSION
+            404, 405 -> ProviderModelDiscoveryFailure.NO_CATALOG
+            409 -> ProviderModelDiscoveryFailure.STALE_SNAPSHOT
+            422 -> ProviderModelDiscoveryFailure.UNSUPPORTED
+            429 -> ProviderModelDiscoveryFailure.RATE_LIMITED
+            504 -> ProviderModelDiscoveryFailure.TIMEOUT
+            400 -> ProviderModelDiscoveryFailure.INVALID_REQUEST
+            else -> ProviderModelDiscoveryFailure.NETWORK_OR_RESPONSE
+        }
+        throw ProviderModelDiscoveryException(kind, error.httpCode)
+    } catch (_: ManagementCapabilitiesMismatch) {
+        throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.UNSUPPORTED)
+    } catch (_: ManagementExecutionUnknown) {
+        throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.NETWORK_OR_RESPONSE)
+    } catch (_: ProviderMetadataReadException) {
+        throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.NETWORK_OR_RESPONSE)
+    } catch (_: IllegalArgumentException) {
+        throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.INVALID_REQUEST)
+    } catch (_: Exception) {
+        throw ProviderModelDiscoveryException(ProviderModelDiscoveryFailure.INVALID_RESPONSE)
+    } finally { discovery.clearSecret() }
+
+    private fun parseCatalog(reply: String, discovery: ProviderModelDiscoveryRequest, keys: List<String>): ProviderModelCatalog {
+        val root = Json.parseToJsonElement(reply).objectValue()
+        val redactor = ProviderMetadataRedactor(root, keys)
+        val base = ProviderBaseUrl.returnedBase(root.string("baseUrl", required = true))
+        if (!ProviderBaseUrl.sameOrigin(base, discovery.chatUrl) || redactor.credentialEcho(base)) throw ManagementProtocolException()
+        val requestedPath = java.net.URI(discovery.baseUrl).rawPath.orEmpty().trimEnd('/')
+        val alternatePath = if (requestedPath.endsWith("/v1")) requestedPath.removeSuffix("/v1") else requestedPath + "/v1"
+        if (java.net.URI(base).rawPath.orEmpty().trimEnd('/') !in setOf(requestedPath, alternatePath)) throw ManagementProtocolException()
+        val rows = root["models"] as? JsonArray ?: throw ManagementProtocolException()
+        if (rows.size > 1000) throw ManagementProtocolException()
+        val models = rows.map { item ->
+            val row = item.objectValue()
+            val id = safeModelId(row.string("id", required = true), redactor)
+            val name = row.string("name")
+            if (redactor.credentialEcho(name) || name.any { it.isISOControl() } || name.codePointCount(0, name.length) > 256) throw ManagementProtocolException()
+            ProviderModelSummary(id, redactor.display(name, id, 256), true)
+        }.distinctBy { it.id }
+        return ProviderModelCatalog(immutable(models), base)
+    }
 
     /** One negotiation per owner-bound native session; older cores may list but cannot write. */
     @Synchronized
@@ -77,6 +146,7 @@ class ProviderManagementClient(
             row.strictBoolOrNull("adminLoopbackOnly") != true || row.strictBoolOrNull("debugEndpoints") != false ||
             row.strictBoolOrNull("nativeAutoUpdate") != false || row["providerSchemaVersion"] != JsonPrimitive(1) ||
             row.strictBoolOrNull("providerManagement") != true) throw ManagementCapabilitiesMismatch()
+        modelDiscoverySupported = row.strictBoolOrNull("providerModelDiscovery") == true
         providerCapabilitiesVerified = true
     }
 
@@ -87,10 +157,13 @@ class ProviderManagementClient(
         // Do not read free error bodies to distinguish it; conservatively require readonly review.
         if (method == "POST" && error.httpCode >= 500) throw ManagementExecutionUnknown()
         when (error.httpCode) {
-            409 -> throw ProviderRevisionConflictException()
+            409 -> if (path == "/api/mobile/providers/create") throw ProviderAlreadyExistsException() else throw ProviderRevisionConflictException()
             422 -> throw ProviderUnsupportedException()
             else -> throw error // fixed status only; no free-form error body
         }
+    } catch (error: ManagementExecutionUnknown) {
+        if (method == "GET") throw ProviderMetadataReadException()
+        throw error
     }
 
     private fun parseList(body: String): ProviderListSnapshot {
@@ -167,7 +240,7 @@ class ProviderManagementClient(
 
     private fun safeModelId(raw: String, redactor: ProviderMetadataRedactor): String {
         val id = providerModelIds(listOf(raw)).single()
-        if (id != raw || redactor.sensitive(id)) throw ManagementProtocolException()
+        if (id != raw || redactor.credentialEcho(id)) throw ManagementProtocolException()
         return id
     }
     private fun <T> readSafe(action: () -> T): T = try { action() } catch (_: Exception) { throw ManagementProtocolException() }
@@ -262,16 +335,17 @@ private class ProviderMetadataRedactor(root: JsonObject, submittedSecrets: List<
             is JsonPrimitive -> if (secretContext && value.isString && value.content.isNotEmpty()) forbidden.add(value.content)
         }
     }
-    fun sensitive(value: String): Boolean = value.isNotEmpty() &&
-        (forbidden.any { if (it.length < 8) value == it else value.contains(it) } || SECRET_PATTERN.containsMatchIn(value) ||
-            HEX_TOKEN.containsMatchIn(value) || value.matches(BARE_TOKEN))
+    fun credentialEcho(value: String): Boolean = value.isNotEmpty() &&
+        (forbidden.any { if (it.length < 8) value == it else value.contains(it) } || SECRET_PATTERN.containsMatchIn(value))
+    fun sensitive(value: String): Boolean = credentialEcho(value) || value.isNotEmpty() &&
+        (HEX_TOKEN.containsMatchIn(value) || value.matches(BARE_TOKEN))
     fun display(value: String, fallback: String, maxRunes: Int): String = when {
         value.isBlank() -> fallback
         value != value.trim() || value.any { it.isISOControl() } || value.codePointCount(0, value.length) > maxRunes || sensitive(value) -> "[已隐藏]"
         else -> value
     }
     companion object {
-        private val SECRET_PATTERN = Regex("""(?i)(sk[-_]|bearer\s|api[_-]?key[=:]|token[=:]|password[=:]|secret[=:]|eyJ[A-Za-z0-9_-]{20,})""")
+        private val SECRET_PATTERN = Regex("""(?i)(?:^|[^A-Za-z0-9])(?:sk[-_]|bearer\s|api[_-]?key[=:]|token[=:]|password[=:]|secret[=:]|eyJ[A-Za-z0-9_-]{20,})""")
         private val HEX_TOKEN = Regex("[0-9a-fA-F]{32,}")
         private val BARE_TOKEN = Regex("[A-Za-z0-9_+/=]{40,}")
     }

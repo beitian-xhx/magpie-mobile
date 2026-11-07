@@ -1,42 +1,33 @@
 # Magpie-Mobile（开发验证版）
 
-目标与范围见 [移植计划](plan.md)。不是主要GUI功能完整覆盖版。用户已确认0.1.1在当前手机启停正常；0.1.2安全接入有CI/host证据，不扩展为真实渠道、多系统或后台稳定验收。
+完整范围见 [移植计划](plan.md)。用户确认0.1.1在当前手机启停正常；本项目仍不是主要GUI功能完整覆盖版。
 
-## 当前里程碑：0.1.3-providers
+## 当前版本：0.1.4-models-ux
 
-- Compose 原生提供商列表、筛选、API Key 新增、模型ID输入/勾选、读取并安全编辑。
-- 初版新增/编辑限定自定义 API-key OpenAI Chat，可用 DeepSeek/OpenAI 地址模板；模板不是订阅登录或真实推理验收。
-- 管理客户端只用3430专用Cookie；网关仍用3425核心注册Key，管理凭据不进入状态流、Intent、日志或WebView。
-- 创建DTO与编辑DTO分离。编辑必须先取得核心新快照+opaque revision，只提交dirty字段；版本冲突拒绝覆盖，不静默重读重写。
-- 空编辑Key保留原值；主动清空模型才禁用全部，Name-only不能把原implicitAll变成noModels。
-- 核心从最新canonical配置事务中开始，受控原子写并保留未支持字段/注释/已有凭据。异常文件、重复id、失效revision、未知字段等拒绝。
-- 提供商文件读异常不是正常空列表；暂停写入。POST结果未知后清输入Key，禁止同draft重放，先刷新真实核心状态。
-- Key仅留短暂密码表单/请求与App私有核心配置，不展示完整保存Key；不rememberSaveable，不自动贴剪贴板。
-- 外部地址须HTTPS；本机HTTP仅由用户明确允许literal loopback。该页面不自动test/detect或调用模型。
+修正0.1.3的默认手填模型流程：**Base URL/所需API Key → 自动只读目录 → 搜索/勾选模型 → 保存**。
 
-## 受控接口
+- 支持省略HTTPS scheme、根地址、/v1及完整Chat endpoint输入，不重复追加/v1；展示实际Base URL。
+- URL及凭据稳定后去抖自动读目录；密码字段完成输入/IME Done后触发。新建可匿名尝试公共目录，需Key时给明确提示。
+- 目录仅发送供应商GET，禁止redirect/推理/test/detect；有超时、大小、数量和凭据回显保护。编辑可同来源复用已存Key，不将旧Key自动转发到新来源。
+- 模型可搜索/全选/逐项选；新建自动采用返回目录，编辑保持原选中与目录未返回的已存模型。手填仅在高级设置作失败备选。
+- 名称/内部标识自动建议且避免已知冲突，手工改过不覆盖；技术ID放高级项。普通保存单操作，明确禁用所有模型才确认。
+- 独立编辑页，字段单行/密码键盘/IME与insets处理；错误在表单内显示，不让用户滚完整列表找编辑器。
+- 本地输入校验失败不丢密码；实际未知写保存非敏感待核对标记，跨表单仍阻止新写，健康只读刷新后才解除。
+- 核心客户端按服务owner复用，读失败不会因换实例丢失阻写状态；重复ID与编辑版本冲突分别提示。
+- 连接/保存后自动刷新网关目录，仍有效聊天选择不清；聊天发送不再关提供商草稿，失败文本保留、新会话显式清上下文、失败user不重复入请求。
+- 异步结果绑定owner和请求代际；停止显示回收中，后台清理完成后才允许启动，不在主线程等待。
 
-见 [提供商客户端](core/src/main/kotlin/cc/fplj/magpiemobile/core/ProviderManagementClient.kt) 与 [精确移动补丁](patches/mobile/manifest.json)。
+## 安全边界
 
-- GET /api/providers：现有列表，key为安全metadata，models对象数组与chosen原始ID分开。
-- POST /api/mobile/providers/create：只允许基础创建字段。
-- GET /api/mobile/providers/editable/{id}：不含完整Key的canonical编辑快照与revision。
-- POST /api/mobile/providers/edit：限定dirty字段，不能通过原任意provider/save破坏配置。
-- provider/test、detect、删除、订阅/桌面执行及其他未验收操作仍不开放。
+继承真实mobile核心M1/M2/M3/M5和核心签发Key。管理3430 Cookie与网关3425 Bearer隔离，Key不进入状态流/Intent/日志/Clipboard；同UID插件不是沙箱。
+受控目录接口POST /api/mobile/providers/models只在私有管理面携草稿，服务商方向严格GET。新增/编辑仍只支持基础custom API-key OpenAI Chat，安全canonical/HMAC revision/严格锁/原子保存/JSONC未知字段保留，不开放任意旧save/test/detect。
 
-## 构建与验证
+## 验证与操作
 
-固定Magpie commit54dc257f/Go1.26.8，mobile,nogui Android ARM64 PIE；Bun固定1.4.2并校验官方ZIP。Actions跑Python应用器、Kotlin/App JVM、Go安全/提供商事务和真实host核心烟测，最后核对APK原生CLI与构建产物SHA256。
-当前新增测试仅编写时不算通过；以对应提交的Actions与发布产物为准。host烟测使用synthetic Key与保留域名，不做真实推理。
+Actions执行Python应用器、JVM、Go安全/目录、真实host fake-vendor GET-only烟测，再构建固定54dc257f/Go1.26.8 mobile,nogui AndroidARM64 PIE核心0.1.3188-mobile.3和APK，核对载荷SHA256。新增代码/静态检查不算实际测试通过，以最终提交CI报告为准。host模拟目录不等于真实渠道推理通过。
 
-## 手机操作
+安装新独立Release后核对版本/SHA，启动并完成安全连接；新增提供商填URL和必要Key，目录自动出现后选择模型保存。目录401/429/404/超时分别提示，获取失败可重试只读或高级补ID，不用聊天探测。保存后目录自动刷新，不需要人为反复刷新。签名冲突先回报并保留旧应用数据。
 
-1. 安装对应0.1.3独立Release，核对版本/SHA；若签名冲突先回报，保留旧应用和数据。
-2. 启动并完成“核心安全连接”，再刷新“提供商管理”列表。
-3. 新增自己的可信API地址/Key和账号可用的原始模型ID；保存前会二次确认，不自动推理。
-4. 编辑先读取新快照；Key留空保持，未触碰的模型和高级设置保持。冲突或未知结果先重读，不重复点击保存。
-5. 保存后刷新网关模型目录。凭据已配置、模型已列出、保存已确认，都不等于真实推理已通过。
+[UX审查记录](docs/ux-review-0.1.4.md)区分已修改与仍需真机确认的键盘/小屏/通知/复杂类型场景。
 
-## 后续边界
-
-真实API/订阅测试需额外用户授权与预算。多协议/订阅编辑、M4加密SAF桥、数据库、高级路由、已验证插件、后台多系统16KB、完整许可义务仍按计划推进。同UID插件不是沙箱。
+真实API/订阅推理需额外预算授权；多协议/订阅、M4/DB/高级路由统计插件、长时后台多系统/16KB和完整许可分发仍按计划推进。

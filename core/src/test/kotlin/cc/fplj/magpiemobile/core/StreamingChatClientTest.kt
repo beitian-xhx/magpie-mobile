@@ -11,9 +11,11 @@ import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class StreamingChatClientTest {
@@ -69,7 +71,9 @@ class StreamingChatClientTest {
         assertEquals("part", e.partialText)
         assertEquals(listOf("part"), deltas)
         assertEquals(200, e.httpCode)
-        assertTrue(e.message!!.contains("EOF"))
+        assertEquals(StreamingChatFailure.EOF_BEFORE_DONE, e.failure)
+        assertEquals("Stream EOF before [DONE]", e.message)
+        assertNull(e.cause)
     }
 
     @Test
@@ -79,7 +83,9 @@ class StreamingChatClientTest {
             StreamingChatClient(config()).stream("m", listOf(ChatClient.Message("user", "x")))
         }
         assertEquals("", e.partialText)
-        assertTrue(e.message!!.contains("EOF"))
+        assertEquals(StreamingChatFailure.EOF_BEFORE_DONE, e.failure)
+        assertEquals("Stream EOF before [DONE]", e.message)
+        assertNull(e.cause)
     }
 
     @Test
@@ -137,8 +143,9 @@ class StreamingChatClientTest {
                     .stream("m", listOf(ChatClient.Message("user", "x")))
             }
             assertEquals("part", e.partialText)
-            assertTrue(e.cause is IOException)
-            assertTrue(e.message!!.contains("I/O"))
+            assertEquals(StreamingChatFailure.IO_FAILURE, e.failure)
+            assertEquals("Stream I/O failure", e.message)
+            assertNull(e.cause)
         } finally {
             closeResponse.countDown()
         }
@@ -157,7 +164,9 @@ class StreamingChatClientTest {
         }
         assertEquals("", e.partialText)
         assertEquals(200, e.httpCode)
-        assertTrue(e.message!!.contains("text/event-stream"))
+        assertEquals(StreamingChatFailure.UNEXPECTED_CONTENT_TYPE, e.failure)
+        assertEquals("Stream expected text/event-stream", e.message)
+        assertNull(e.cause)
     }
 
     @Test
@@ -180,14 +189,16 @@ class StreamingChatClientTest {
         }
         assertEquals("part", e.partialText)
         assertEquals(200, e.httpCode)
-        assertTrue(e.cause is ChatException)
-        assertTrue(e.message!!.contains("billing"))
+        assertEquals(StreamingChatFailure.SSE_ERROR, e.failure)
+        assertEquals("Stream SSE error", e.message)
+        assertNull(e.cause)
+        assertFalse(e.stackTraceToString().contains("billing"))
     }
 
     @Test
-    fun sseErrorMessageRedactsActualGatewayKeyAndKnownSecrets() {
+    fun sseErrorMessageDoesNotExposeGatewayOrArbitraryProviderKeys() {
         val key = "opaque-gateway-secret-123456"
-        val token = "sk-provider-secret-123456789"
+        val token = "ordinary.provider.key/123+opaque-value"
         server.createContext("/v1/chat/completions") { ex ->
             respond(ex, "data: {\"error\":{\"message\":\"billing $key Bearer $token\"}}\n\n")
         }
@@ -197,7 +208,12 @@ class StreamingChatClientTest {
         }
         assertFalse(e.message!!.contains(key))
         assertFalse(e.message!!.contains(token))
-        assertTrue(e.message!!.contains("billing"))
+        assertEquals(StreamingChatFailure.SSE_ERROR, e.failure)
+        assertEquals("Stream SSE error", e.message)
+        assertNull(e.cause)
+        for (secret in listOf("billing", key, token)) {
+            assertFalse(e.stackTraceToString().contains(secret))
+        }
     }
 
     @Test
@@ -212,5 +228,66 @@ class StreamingChatClientTest {
         StreamingChatClient(config()).stream("m", listOf(ChatClient.Message("user", "x")))
         assertTrue(seenBody.contains("\"stream\":true"))
         assertEquals("text/event-stream", seenAccept)
+    }
+
+    @Test
+    fun arbitraryErrorJsonShapesNeverLeakMessagesOrCauseAndNeverReplay() {
+        val key = "ordinary.provider.key/123+opaque-value"
+        val errors = listOf(
+            """{"message":"billing $key","APIKey":"$key","code":"$key","status":501}""",
+            """["$key",{"nested":{"APIKey":"$key"}}]""",
+            "\"$key\"",
+        )
+        val n = AtomicInteger(0)
+        server.createContext("/v1/chat/completions") { ex ->
+            val error = errors[n.getAndIncrement() % errors.size]
+            respond(ex, """data: {"choices":[{"delta":{"content":"part"}}]}""" + "\n\n" +
+                "data: {\"error\":$error}\n\n")
+        }
+        for (i in errors.indices) {
+            val e = assertFailsWith<StreamingChatException> {
+                StreamingChatClient(config()).stream("m", listOf(ChatClient.Message("user", "x")))
+            }
+            assertEquals("part", e.partialText)
+            assertEquals(StreamingChatFailure.SSE_ERROR, e.failure)
+            assertEquals("Stream SSE error", e.message)
+            assertEquals(200, e.httpCode)
+            assertNull(e.cause)
+            assertFalse(e.stackTraceToString().contains(key))
+            assertFalse(e.stackTraceToString().contains("billing"))
+            assertEquals(i + 1, n.get())
+        }
+    }
+
+    @Test
+    fun callbackErrorsUseRealResponseStatusAndNeverExposeRawFailureOrReplay() {
+        val key = "ordinary.callback.key/123+opaque-value"
+        val n = AtomicInteger(0)
+        server.createContext("/v1/chat/completions") { ex ->
+            n.incrementAndGet()
+            respond(ex, """data: {"choices":[{"delta":{"content":"part"}}]}""" + "\n\ndata: [DONE]\n\n")
+        }
+        val failures = listOf(
+            ChatException("billing $key", 405),
+            ChatException("billing $key", 501),
+            IOException("billing $key"),
+            IllegalStateException("billing $key"),
+            StreamingChatException(StreamingChatFailure.SSE_ERROR, key, 501),
+        )
+        for ((i, failure) in failures.withIndex()) {
+            val e = assertFailsWith<StreamingChatException> {
+                StreamingChatClient(config()).stream("m", listOf(ChatClient.Message("user", "x"))) {
+                    throw failure
+                }
+            }
+            assertEquals("part", e.partialText)
+            assertEquals(StreamingChatFailure.CALLBACK_FAILURE, e.failure)
+            assertEquals("Stream callback failure", e.message)
+            assertEquals(200, e.httpCode)
+            assertNull(e.cause)
+            assertFalse(e.stackTraceToString().contains(key))
+            assertFalse(e.stackTraceToString().contains("billing"))
+            assertEquals(i + 1, n.get())
+        }
     }
 }

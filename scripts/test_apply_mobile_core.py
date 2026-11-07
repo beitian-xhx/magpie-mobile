@@ -242,6 +242,19 @@ class ApplyMobileCoreTests(unittest.TestCase):
         self.assertIn("providerManagement", policy)
         self.assertNotIn("provider/test", policy)
 
+    def test_read_only_model_discovery_guards_are_packaged(self):
+        root = patcher.DEFAULT_PATCH_ROOT
+        source = (root / "overlay/internal/provider/mobile_discovery.go").read_text(encoding="utf-8")
+        for guard in ("http.MethodGet", "mobileModelsTimeout = 8 * time.Second", "mobileModelsBytes = 2 << 20", "mobileModelsCount = 1000", "http.ErrUseLastResponse", "mobileCanonical()", "hmac.Equal", "oldOrigin != newOrigin", "http.StatusNotFound && index+1 < len(bases)", "io.LimitReader(response.Body, mobileModelsBytes+1)", "mobileModelsContainKey", "DisableCompression: true"):
+            self.assertIn(guard, source)
+        for unsafe in ("http.MethodPost", "MobileEditProvider(", "MobileCreateProvider(", "mobileWrite(", "Save(", "Test(", "Detect("):
+            self.assertNotIn(unsafe, source)
+        routes = (root / "overlay/internal/gui/mobile_providers.go").read_text(encoding="utf-8")
+        self.assertIn("/api/mobile/providers/models", routes)
+        self.assertIn("[]string{\"chat\", \"key\", \"id\", \"revision\"}", routes)
+        policy = (root / "overlay/internal/gui/mobile_policy.go").read_text(encoding="utf-8")
+        self.assertIn("providerModelDiscovery", policy)
+
     def test_real_package_inventory_and_policy_guards(self):
         root = patcher.DEFAULT_PATCH_ROOT
         manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
@@ -260,7 +273,7 @@ class ApplyMobileCoreTests(unittest.TestCase):
         for exception in ("ownCallback", "corsPreflight", "keyPageOpen", "imageTokenAsked", "oidcExchange", "proveAsked"):
             self.assertRegex(inserts, "!mobilepolicy.Enabled.*" + exception)
         tests = [(root / "overlay" / o["path"]).read_text() for o in manifest["overlays"] if o["path"].endswith("_test.go")]
-        self.assertEqual(len(tests), 5)
+        self.assertEqual(len(tests), 7)
         self.assertTrue(all(t.startswith("//go:build mobile\n") for t in tests))
         self.assertGreaterEqual(sum(t.count("func TestMobile") for t in tests), 10)
 

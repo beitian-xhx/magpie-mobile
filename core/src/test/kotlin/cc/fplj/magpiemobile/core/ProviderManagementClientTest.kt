@@ -109,7 +109,7 @@ class ProviderManagementClientTest {
         assertFalse(api.client().list().providers.single().editable)
     }
 
-    @Test fun missingOrMismatchProviderCapabilitiesCannotPostAndDoNotLeakOrRetainKey() {
+    @Test fun missingOrMismatchProviderCapabilitiesCannotPostOrLeakAndKeepPreflightKey() {
         val original = Json.parseToJsonElement(ProviderApiFixture.CAPABILITIES).jsonObject
         val variants = listOf(
             JsonObject(original - "providerSchemaVersion"), JsonObject(original - "providerManagement"),
@@ -125,7 +125,7 @@ class ProviderManagementClientTest {
             val error = assertFailsWith<ManagementCapabilitiesMismatch> { api.client().create(draft) }
             assertNull(error.cause)
             assertFalse(error.stackTraceToString().contains(ProviderApiFixture.API_KEY))
-            assertFailsWith<IllegalArgumentException> { draft.requestBody() }
+            assertEquals(JsonPrimitive(ProviderApiFixture.API_KEY), draft.requestBody()["key"])
         }
         assertEquals(0, api.createRequests.get())
         assertEquals(0, api.editRequests.get())
@@ -166,12 +166,12 @@ class ProviderManagementClientTest {
         assertEquals(3, api.createRequests.get())
     }
 
-    @Test fun oversizedUtf8RequestIsRejectedBeforeAnyNetworkAndKeyIsCleared() {
+    @Test fun oversizedUtf8RequestIsRejectedBeforeAnyNetworkAndPreflightKeyIsKept() {
         val models = (0..999).map { "m" + it + "😀".repeat(252) }
         val draft = ProviderCreateDraft("bulk", "Bulk", "https://api.example/chat", ProviderApiFixture.API_KEY, models)
         assertFailsWith<IllegalArgumentException> { api.client().create(draft) }
         assertTrue(api.requests.isEmpty())
-        assertFailsWith<IllegalArgumentException> { draft.requestBody() }
+        assertEquals(JsonPrimitive(ProviderApiFixture.API_KEY), draft.requestBody()["key"])
     }
 
     @Test fun builtinPresetOrAccountIsNotAdvertisedEditableAnd422IsFixedUnsupported() {
@@ -281,6 +281,17 @@ class ProviderManagementClientTest {
         val bad = ProviderEditSnapshot(snapshot.id, "", snapshot.name, snapshot.chat, snapshot.models, snapshot.noModels, snapshot.key)
         assertFailsWith<ProviderEditPreconditionException> { api.client().edit(ProviderEditDraft(bad, name = "Renamed")) }
         assertEquals(0, api.editRequests.get())
+    }
+
+    @Test fun create409ReportsAlreadyExistsNotRevisionConflictAndNeverOverwrites() {
+        api.createHook = { exchange, _ -> api.respond(exchange, 409, "provider already exists " + ProviderApiFixture.API_KEY) }
+        val before = api.canonical
+        val draft = draft("custom-api")
+        val error = assertFailsWith<ProviderAlreadyExistsException> { api.client().create(draft) }
+        assertTrue(error.message!!.contains("已存在"))
+        assertEquals(before, api.canonical)
+        assertEquals(1, api.createRequests.get())
+        assertFailsWith<IllegalArgumentException> { draft.requestBody() }
     }
 
     @Test fun stale409RequiresExplicitReloadAndNeverSilentOverwriteOrReplay() {
@@ -401,6 +412,10 @@ internal class ProviderApiFixture : AutoCloseable {
     val requests = CopyOnWriteArrayList<ProviderRecordedRequest>()
     val createRequests = AtomicInteger()
     val editRequests = AtomicInteger()
+    val modelRequests = AtomicInteger()
+    @Volatile var modelsStatus: Int = 200
+    @Volatile var modelsOverride: String? = null
+    @Volatile var modelsHook: ((HttpExchange, JsonObject) -> Unit)? = null
     @Volatile var revision = "a".repeat(64)
     @Volatile var capabilitiesBody: String = CAPABILITIES
     @Volatile var listOverride: String? = null
@@ -430,6 +445,19 @@ internal class ProviderApiFixture : AutoCloseable {
                         respond(exchange, 200, listOverride ?: JsonObject(mapOf("providers" to JsonArray(listOf(providerRow())))).toString())
                     exchange.requestMethod == "GET" && exchange.requestURI.path.startsWith("/api/mobile/providers/editable/") ->
                         respond(exchange, editableStatus, if (editableStatus == 200) snapshotOverride ?: safeSnapshot().toString() else "untrusted " + API_KEY)
+                    exchange.requestMethod == "POST" && exchange.requestURI.path == "/api/mobile/providers/models" -> {
+                        modelRequests.incrementAndGet()
+                        val request = Json.parseToJsonElement(body).jsonObject
+                        val hook = modelsHook
+                        val suppliedId = request["id"]
+                        if (hook != null) hook(exchange, request)
+                        else if (suppliedId != null && (suppliedId != canonical["id"] || request["revision"] != JsonPrimitive(revision))) respond(exchange, 409, "stale " + API_KEY)
+                        else if (modelsStatus != 200) respond(exchange, modelsStatus, "untrusted model error " + API_KEY)
+                        else respond(exchange, 200, modelsOverride ?: buildJsonObject {
+                            put("baseUrl", request["chat"]!!.jsonPrimitive.content.removeSuffix("/chat/completions").trimEnd('/'))
+                            put("models", JsonArray(listOf(buildJsonObject { put("id", "catalog-model"); put("name", "Catalog Model") })))
+                        }.toString())
+                    }
                     exchange.requestMethod == "POST" && exchange.requestURI.path == "/api/mobile/providers/create" -> {
                         createRequests.incrementAndGet()
                         val request = Json.parseToJsonElement(body).jsonObject
@@ -485,7 +513,7 @@ internal class ProviderApiFixture : AutoCloseable {
     companion object {
         const val MANAGER_KEY = "0123456789abcdef0123456789abcdef"
         const val API_KEY = "sk-provider-regression-only-secret"
-        const val CAPABILITIES = """{"schemaVersion":1,"coreVersion":"mobile-provider-v1","mobile":true,"loopbackKeys":true,"debugEndpoints":false,"adminLoopbackOnly":true,"nativeAutoUpdate":false,"providerSchemaVersion":1,"providerManagement":true}"""
+        const val CAPABILITIES = """{"schemaVersion":1,"coreVersion":"mobile-provider-v1","mobile":true,"loopbackKeys":true,"debugEndpoints":false,"adminLoopbackOnly":true,"nativeAutoUpdate":false,"providerSchemaVersion":1,"providerManagement":true,"providerModelDiscovery":true}"""
     }
 }
 internal data class ProviderRecordedRequest(

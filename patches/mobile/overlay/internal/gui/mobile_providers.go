@@ -17,7 +17,7 @@ var mobileProviderPathID = regexp.MustCompile("^[a-z0-9][a-z0-9._-]{0,63}$")
 
 func mobileProviderAPIAllowed(method, p string) bool {
 	if method == http.MethodPost {
-		return p == "/api/mobile/providers/create" || p == "/api/mobile/providers/edit"
+		return p == "/api/mobile/providers/create" || p == "/api/mobile/providers/edit" || p == "/api/mobile/providers/models"
 	}
 	if method == http.MethodGet {
 		id, ok := strings.CutPrefix(p, "/api/mobile/providers/editable/")
@@ -27,13 +27,22 @@ func mobileProviderAPIAllowed(method, p string) bool {
 }
 
 // The wrapper is inside webGuard/webOwnPage, before any desktop route. It
-// performs one core mutation only: no test, detect, model fetch or auto replay.
+// performs a bounded GET directory read or one explicit core mutation; never
+// test/detect, vendor inference, generic model fetch or automatic replay.
 func mobileProviderServe(w http.ResponseWriter, r *http.Request) bool {
 	if !mobileProviderAPIAllowed(r.Method, r.URL.Path) { return false }
 	w.Header().Set("Cache-Control", "no-store")
 	var snapshot provider.MobileProviderSnapshot
 	var err error
 	switch r.URL.Path {
+	case "/api/mobile/providers/models":
+		var in provider.MobileModelDiscoveryRequest
+		err = mobileProviderDecode(w, r, &in, []string{"chat", "key", "id", "revision"})
+		if err != nil { mobileProviderFailure(w, err); return true }
+		catalog, err := provider.MobileDiscoverModels(r.Context(), in)
+		if err != nil { mobileProviderFailure(w, err); return true }
+		writeJSON(w, catalog)
+		return true
 	case "/api/mobile/providers/create":
 		var in provider.MobileProviderCreate
 		err = mobileProviderDecode(w, r, &in, []string{"new", "id", "name", "chat", "key", "models", "noModels"})
@@ -83,7 +92,10 @@ func mobileProviderDecode(w http.ResponseWriter, r *http.Request, out any, allow
 
 func mobileProviderFailure(w http.ResponseWriter, err error) {
 	status, code, message := http.StatusInternalServerError, "provider_unreadable", "provider configuration cannot be safely read"
+	var discovery *provider.MobileProviderModelsError
 	switch {
+	case errors.As(err, &discovery):
+		status, code, message = discovery.Status, discovery.Code, discovery.Message
 	case errors.Is(err, provider.ErrMobileProviderRevision):
 		status, code, message = http.StatusConflict, "provider_revision_conflict", "provider changed; reload editable snapshot"
 	case errors.Is(err, provider.ErrMobileProviderExists):

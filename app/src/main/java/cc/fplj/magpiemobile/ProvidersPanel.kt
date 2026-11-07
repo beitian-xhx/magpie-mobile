@@ -1,221 +1,278 @@
 package cc.fplj.magpiemobile
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import cc.fplj.magpiemobile.core.ManagementExecutionUnknown
-import cc.fplj.magpiemobile.core.ManagementHttpException
-import cc.fplj.magpiemobile.core.ProviderCreateDraft
-import cc.fplj.magpiemobile.core.ProviderEditDraft
-import cc.fplj.magpiemobile.core.ProviderEditSnapshot
-import cc.fplj.magpiemobile.core.ProviderListSnapshot
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import cc.fplj.magpiemobile.core.*
+import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Provider metadata is UI state. The API key exists only in this unsaved password field/draft. */
+/** Only nonsecret write-recovery flags are saveable. Password fields/drafts stay ephemeral. */
 @Composable
-fun ProvidersPanel(enabled: Boolean, onProvidersChanged: () -> Unit) {
+fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChanged: (Boolean) -> Unit = {}, onProvidersChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val latestEnabled by rememberUpdatedState(enabled)
-    var list by remember { mutableStateOf<ProviderListSnapshot?>(null) }
+    var providers by remember { mutableStateOf<ProviderListSnapshot?>(null) }
+    var listHealthy by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf("先连接核心，再读取真实提供商配置") }
+    var message by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
     var open by remember { mutableStateOf(false) }
-    var editSnapshot by remember { mutableStateOf<ProviderEditSnapshot?>(null) }
+    var snapshot by remember { mutableStateOf<ProviderEditSnapshot?>(null) }
     var id by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var chatUrl by remember { mutableStateOf("") }
-    var apiKey by remember { mutableStateOf("") } // intentionally not rememberSaveable
-    var modelsText by remember { mutableStateOf("") }
-    var modelsTouched by remember { mutableStateOf(false) }
-    var availableModels by remember { mutableStateOf(emptyList<String>()) }
-    var allowLoopbackHttp by remember { mutableStateOf(false) }
-    var confirmSave by remember { mutableStateOf(false) }
-    var writeUncertain by remember { mutableStateOf(false) }
-
-    fun modelIds(): List<String> = modelsText.split(',', '\n', '\r').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-    fun errorMessage(e: Exception): String = when {
-        e is cc.fplj.magpiemobile.core.ProviderConfigurationUnreadableException -> "核心提供商文件异常，已拒绝写入；请保留文件并排查。"
-        e is cc.fplj.magpiemobile.core.ProviderRevisionConflictException -> "核心配置版本已变化，未覆盖；请重新打开编辑快照。"
-        e is cc.fplj.magpiemobile.core.ProviderUnsupportedException -> "当前仅能编辑自定义API Key/OpenAI Chat渠道，此类型原配置保持。"
-        e is cc.fplj.magpiemobile.core.ProviderEditPreconditionException -> "没有修改字段或编辑版本无效，请重新读取后修改。"
-        e is ManagementExecutionUnknown -> "保存结果不确定：请刷新列表并重新打开编辑，不要重复保存或重建提供商。"
-        e is ManagementHttpException && e.httpCode == 409 -> "核心配置已变化，保存被拒绝；请重新读取后编辑，未覆盖新配置。"
-        e is ManagementHttpException -> "管理操作失败：HTTP " + e.httpCode
-        e is IllegalArgumentException -> e.message ?: "表单字段格式错误"
-        else -> "操作失败（" + e.javaClass.simpleName + "），请检查输入或重新读取配置。"
+    var baseUrl by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
+    var keyFocused by remember { mutableStateOf(false) }
+    var nameTouched by remember { mutableStateOf(false) }
+    var idTouched by remember { mutableStateOf(false) }
+    var localHttp by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(false) }
+    var manual by remember { mutableStateOf(false) }
+    var manualText by remember { mutableStateOf("") }
+    var modelSearch by remember { mutableStateOf("") }
+    var selected by remember { mutableStateOf(emptyList<String>()) }
+    var modelOptions by remember { mutableStateOf(emptyList<ProviderModelSummary>()) }
+    var policy by remember { mutableStateOf(ProviderEditorPolicy(true)) }
+    var discoveryLoading by remember { mutableStateOf(false) }
+    var discoveryDone by remember { mutableStateOf(false) }
+    var discoveryError by remember { mutableStateOf("") }
+    var retryCatalog by remember { mutableStateOf(0) }
+    var operationSequence by remember { mutableStateOf(0L) }
+    var catalogSequence by remember { mutableStateOf(0L) }
+    var recoveryRequired by rememberSaveable { mutableStateOf(false) }
+    var pendingProviderId by rememberSaveable { mutableStateOf("") }
+    var confirmDisable by remember { mutableStateOf(false) }
+    val owner = if (enabled) NativeCoreSession.providerSessionId() else null
+    fun setBusy(value: Boolean) { busy = value; onBusyChanged(value) }
+    fun current(session: Long?, sequence: Long): Boolean = latestEnabled && session != null &&
+        session == NativeCoreSession.providerSessionId() && sequence == operationSequence
+    fun errorText(e: Exception): String = when (e) {
+        is ProviderAlreadyExistsException -> "标识已被占用，请刷新列表并编辑已有提供商，或修改高级标识。"
+        is ProviderRevisionConflictException -> "配置已变化，请重新打开编辑；没有覆盖新配置。"
+        is ProviderConfigurationUnreadableException -> "核心配置文件异常，写入暂停；请保留文件并排查。"
+        is ProviderUnsupportedException -> "此类型暂不支持基础编辑，原配置保持。"
+        is ProviderEditPreconditionException -> "尚未修改字段，或编辑版本已过期。"
+        is ManagementExecutionUnknown -> "保存结果待核对，请点击“核对保存结果”；不会自动再次提交。"
+        is ManagementHttpException -> "请求失败：HTTP " + e.httpCode
+        is IllegalArgumentException -> e.message ?: "请检查表单字段"
+        else -> "操作失败，请重试读取；不会自动重复保存。"
     }
-    fun closeEditor() {
-        apiKey = ""; confirmSave = false; open = false; editSnapshot = null
+    fun refresh() {
+        if (!enabled || busy) return
+        val session = owner; val sequence = ++operationSequence
+        listHealthy = false; setBusy(true)
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().getProviders() }
+                if (current(session, sequence)) {
+                    providers = result; listHealthy = !result.hasFileError
+                    if (listHealthy) { recoveryRequired = false; pendingProviderId = ""; message = "" }
+                    else message = "提供商文件异常，写入暂停"
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { if (current(session, sequence)) { listHealthy = false; message = "列表读取失败：" + errorText(e) } }
+            finally { if (sequence == operationSequence) setBusy(false) }
+        }
     }
-    fun preset(presetId: String, presetName: String, url: String, models: String) {
-        editSnapshot = null; id = presetId; name = presetName; chatUrl = url; apiKey = ""
-        modelsText = models; modelsTouched = false; availableModels = emptyList(); writeUncertain = false; allowLoopbackHttp = false; open = true
+    fun close() { key = ""; showKey = false; open = false; confirmDisable = false }
+    fun newProvider(presetId: String = "", presetName: String = "", url: String = "") {
+        if (!listHealthy || recoveryRequired || busy || operationBusy) return
+        snapshot = null; id = presetId; name = presetName; baseUrl = url; key = ""
+        idTouched = false; nameTouched = false; localHttp = false; advanced = false; manual = false
+        selected = emptyList(); modelOptions = emptyList(); policy = ProviderEditorPolicy(true)
+        discoveryDone = false; discoveryError = ""; message = ""; manualText = ""; open = true
     }
-    LaunchedEffect(enabled) {
-        if (!enabled) { closeEditor(); list = null; message = "核心已断开，提供商请求暂停" }
+    LaunchedEffect(enabled, owner) {
+        if (!enabled) { key = ""; discoveryLoading = false; listHealthy = false; setBusy(false); message = "核心已断开，草稿名称、地址与选择已保留；重连后请补充密钥" }
+        else refresh()
     }
-
+    val normalized = try { ProviderBaseUrl.normalize(baseUrl) } catch (_: Exception) { "" }
+    val newOriginNeedsKey = snapshot != null && key.isBlank() && normalized.isNotEmpty() && run {
+        val old = java.net.URI(snapshot!!.chatUrl); val next = java.net.URI(normalized)
+        fun port(uri: java.net.URI): Int = if (uri.port != -1) uri.port else if (uri.scheme == "https") 443 else 80
+        old.scheme != next.scheme || old.host != next.host || port(old) != port(next)
+    }
+    val keyFingerprint = remember(key) { MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') } }
+    LaunchedEffect(open, normalized, keyFingerprint, keyFocused, localHttp, owner, snapshot?.revision, retryCatalog) {
+        val sequence = ++catalogSequence
+        discoveryLoading = false; discoveryDone = false; discoveryError = ""
+        if (!open || !enabled || normalized.isEmpty() || keyFocused || newOriginNeedsKey) return@LaunchedEffect
+        if (snapshot == null) {
+            if (!nameTouched) name = ProviderBaseUrl.suggestName(baseUrl)
+            if (!idTouched) {
+                val base = ProviderBaseUrl.suggestId(baseUrl)
+                val used = providers?.providers.orEmpty().map { it.id }.toSet()
+                var suggestion = base; var number = 2
+                while (suggestion in used) { suggestion = base.take(57) + "-" + number++ }
+                id = suggestion
+            }
+        }
+        discoveryLoading = true
+        delay(700) // settle URL/credential changes; old requests cannot apply to this generation
+        var request: ProviderModelDiscoveryRequest? = null
+        try {
+            val activeRequest = ProviderModelDiscoveryRequest(baseUrl, key, snapshot?.id, snapshot?.revision, localHttp)
+            request = activeRequest
+            val catalog = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().discoverModels(activeRequest) }
+            if (sequence == catalogSequence && latestEnabled && owner == NativeCoreSession.providerSessionId()) {
+                modelOptions = catalog.models; selected = policy.applyCatalog(catalog.models.map { it.id })
+                manualText = selected.joinToString("\n"); discoveryDone = true
+                if (catalog.models.isEmpty()) discoveryError = "目录为空；可检查凭据权限，或打开高级设置补充模型ID。"
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (sequence == catalogSequence && latestEnabled) discoveryError = if (e is ProviderModelDiscoveryException) e.message ?: "无法读取模型目录" else "目录读取失败，请重试读取；没有修改配置。"
+        } finally { request?.clearSecret(); if (sequence == catalogSequence) discoveryLoading = false }
+    }
+    fun submit() {
+        if (busy || operationBusy || recoveryRequired || !listHealthy || !enabled) return
+        val session = owner; val sequence = ++operationSequence
+        val initial = snapshot; val inputKey = key; val inputName = name; val inputId = id
+        val inputUrl = baseUrl; val inputModels = selected; val editedModels = policy.editedModels(); val allow = localHttp
+        setBusy(true)
+        scope.launch {
+            var create: ProviderCreateDraft? = null; var edit: ProviderEditDraft? = null
+            var submitted = false; var confirmed = false
+            try {
+                if (initial == null) create = ProviderCreateDraft(inputId, inputName, inputUrl, inputKey, inputModels, allow)
+                else edit = ProviderEditDraft(initial, inputName, inputUrl, inputKey, editedModels, allow)
+                // Validate locally before any network call. A typo does not erase the password field.
+                create?.requestBody(); edit?.requestBody()
+                if (!current(session, sequence)) return@launch
+                recoveryRequired = true; pendingProviderId = inputId; submitted = true; key = ""
+                withContext(Dispatchers.IO) {
+                    val client = NativeCoreSession.providerClient()
+                    val draft = create
+                    if (draft != null) client.create(draft) else client.edit(checkNotNull(edit))
+                }
+                confirmed = true
+                if (current(session, sequence)) {
+                    recoveryRequired = false; pendingProviderId = ""; close(); onProvidersChanged()
+                    message = "已保存；正在自动刷新目录，尚未验证真实推理"
+                    val latest = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().getProviders() }
+                    if (current(session, sequence)) { providers = latest; listHealthy = !latest.hasFileError; message = "配置已保存" }
+                }
+            } catch (e: CancellationException) { throw e } // pending nonsecret marker survives cancellation/recreation
+            catch (e: Exception) {
+                if (current(session, sequence)) {
+                    if (confirmed) { recoveryRequired = false; listHealthy = false; message = "保存已确认，但刷新失败；请重新读取，勿再保存。" }
+                    else { if (e !is ManagementExecutionUnknown) { recoveryRequired = false; pendingProviderId = "" }; message = errorText(e) }
+                }
+            } finally { create?.clearSecret(); edit?.clearSecret(); if (submitted) key = ""; if (sequence == operationSequence) setBusy(false) }
+        }
+    }
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("提供商管理（API Key）", style = MaterialTheme.typography.titleMedium)
-            Text("支持基础 OpenAI 兼容渠道。凭据存在不等于推理已验证；此页面不自动调用 test/detect 或真实模型。", style = MaterialTheme.typography.bodySmall)
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("提供商", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = enabled && !busy, onClick = {
-                    busy = true
-                    val sessionId = NativeCoreSession.providerSessionId()
-                    scope.launch {
-                        try {
-                            val loaded = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().getProviders() }
-                            if (latestEnabled && sessionId == NativeCoreSession.providerSessionId()) { list = loaded; message = if (loaded.hasFileError) "核心提供商文件异常，写入暂停；请保留文件并排查" else "已读取核心提供商列表" }
-                        } catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { message = errorMessage(e) }
-                        finally { busy = false }
-                    }
-                }) { Text(if (busy) "处理中…" else "刷新提供商") }
-                Button(enabled = enabled && !busy && list?.hasFileError != true, onClick = { preset("", "", "", "") }) { Text("新增") }
+                Button(enabled = enabled && !busy, onClick = ::refresh) { Text(if (recoveryRequired) "核对保存结果" else "刷新") }
+                Button(enabled = enabled && listHealthy && !busy && !operationBusy && !recoveryRequired, onClick = { newProvider() }) { Text("新增提供商") }
             }
-            Text(message, style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(value = search, onValueChange = { search = it }, label = { Text("按名称或标识筛选") }, modifier = Modifier.fillMaxWidth())
-            val matches = list?.providers.orEmpty().filter { it.name.contains(search, true) || it.id.contains(search, true) }
-            if (list != null && matches.isEmpty()) Text("没有匹配的提供商；可新增自己的 API Key 渠道")
+            if (message.isNotEmpty()) Text(message, style = MaterialTheme.typography.bodySmall)
+            if (recoveryRequired) Text("有待核对保存结果（" + pendingProviderId + "），读取成功前不会开放新的写操作")
+            OutlinedTextField(search, { search = it }, singleLine = true, label = { Text("搜索名称或标识") }, modifier = Modifier.fillMaxWidth())
+            val all = providers?.providers.orEmpty()
+            val matches = all.filter { it.name.contains(search,true) || it.id.contains(search,true) }
+            if (listHealthy && all.isEmpty()) Text("尚未添加提供商，点击新增并填写接口地址即可获取模型")
+            else if (matches.isEmpty() && search.isNotEmpty()) TextButton(onClick = { search = "" }) { Text("没有匹配项，清除筛选") }
             matches.take(50).forEach { provider ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(provider.name.ifBlank { provider.id }, style = MaterialTheme.typography.titleSmall)
-                        Text("标识：" + provider.id + " · 可见模型 " + provider.models.size, style = MaterialTheme.typography.bodySmall)
-                        Text(if (provider.key.set) "凭据已设置（不展示完整密钥）" else if (provider.key.optional) "该渠道允许无密钥" else "未配置凭据", style = MaterialTheme.typography.bodySmall)
-                        Text("连通/推理：未由本次操作验证", style = MaterialTheme.typography.bodySmall)
-                        if (!provider.editable) Text("此类型暂不支持基础编辑，原配置保持", style = MaterialTheme.typography.bodySmall)
-                        Button(enabled = enabled && !busy && provider.editable, onClick = {
-                            busy = true
-                            val sessionId = NativeCoreSession.providerSessionId()
-                            scope.launch {
-                                try {
-                                    val snapshot = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().editable(provider.id) }
-                                    if (latestEnabled && sessionId == NativeCoreSession.providerSessionId()) {
-                                        editSnapshot = snapshot; id = snapshot.id; name = snapshot.name; chatUrl = snapshot.chatUrl
-                                        apiKey = ""; modelsText = snapshot.modelIds.joinToString("\n"); modelsTouched = false
-                                        availableModels = (provider.models.map { it.id } + snapshot.modelIds).distinct()
-                                        allowLoopbackHttp = snapshot.chatUrl.startsWith("http://")
-                                        writeUncertain = false; open = true; message = "已取得核心编辑版本，未支持字段由核心保留"
-                                    }
-                                } catch (e: CancellationException) { throw e }
-                                catch (e: Exception) { message = errorMessage(e) }
-                                finally { busy = false }
+                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
+                    Text(provider.name, style = MaterialTheme.typography.titleSmall)
+                    Text((if (provider.off) "已停用" else if (provider.noModels) "全部模型已禁用" else "已配置") + " · 选中 " + provider.chosen.size + " / 可见 " + provider.models.size, style = MaterialTheme.typography.bodySmall)
+                    Text(if (provider.key.set) "密钥已配置；推理未验证" else "缺少凭据；推理未验证", style = MaterialTheme.typography.bodySmall)
+                    TextButton(enabled = enabled && !busy && !operationBusy && listHealthy && !recoveryRequired && provider.editable, onClick = {
+                        val session = owner; val sequence = ++operationSequence; setBusy(true)
+                        scope.launch { try {
+                            val edit = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().editable(provider.id) }
+                            if (current(session, sequence)) {
+                                snapshot = edit; id = edit.id; name = edit.name; baseUrl = edit.chatUrl; key = ""; nameTouched = true; idTouched = true
+                                localHttp = edit.chatUrl.startsWith("http://"); advanced = false; manual = false
+                                policy = ProviderEditorPolicy(false, edit.modelIds, edit.noModels); selected = edit.modelIds
+                                modelOptions = provider.models; manualText = selected.joinToString("\n"); message = ""; open = true
                             }
-                        }) { Text("读取并安全编辑") }
-                    }
-                }
-            }
-            if (matches.size > 50) Text("匹配 " + matches.size + " 个，仅显示前50个；请进一步筛选")
-            if (open) {
-                Text(if (editSnapshot == null) "新增 OpenAI 兼容提供商" else "编辑 " + id, style = MaterialTheme.typography.titleSmall)
-                if (editSnapshot == null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(enabled = !busy, onClick = { preset("deepseek-api", "DeepSeek API", "https://api.deepseek.com/v1", "deepseek-chat") }) { Text("DeepSeek模板") }
-                        TextButton(enabled = !busy, onClick = { preset("openai-api", "OpenAI API", "https://api.openai.com/v1", "") }) { Text("OpenAI模板") }
-                    }
-                }
-                OutlinedTextField(value = id, onValueChange = { id = it }, enabled = editSnapshot == null && !busy,
-                    label = { Text("唯一标识（小写字母、数字、短横线）") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = name, onValueChange = { name = it }, enabled = !busy,
-                    label = { Text("显示名称") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = chatUrl, onValueChange = { chatUrl = it }, enabled = !busy,
-                    label = { Text("Chat API地址（通常含/v1）") }, modifier = Modifier.fillMaxWidth())
-                Row {
-                    Checkbox(checked = allowLoopbackHttp, onCheckedChange = { allowLoopbackHttp = it }, enabled = !busy)
-                    Text("明确允许本机 HTTP（仅loopback）；外部地址仍须HTTPS", style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, enabled = !busy,
-                    label = { Text(if (editSnapshot == null) "API Key" else "新API Key（留空保留原密钥）") },
-                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = modelsText, onValueChange = { modelsText = it; modelsTouched = true }, enabled = !busy,
-                    label = { Text("模型ID，每行一个或逗号分隔") }, modifier = Modifier.fillMaxWidth())
-                Text("请填写该账号实际可用的原始模型ID。空列表将明确禁用全部模型，不隐式启用所有。", style = MaterialTheme.typography.bodySmall)
-                availableModels.take(30).forEach { model ->
-                    Row {
-                        val selected = model in modelIds()
-                        Checkbox(checked = selected, enabled = !busy, onCheckedChange = { checked ->
-                            val ids = modelIds().toMutableList()
-                            if (checked && model !in ids) ids.add(model) else if (!checked) ids.remove(model)
-                            modelsText = ids.joinToString("\n"); modelsTouched = true
-                        })
-                        Text(model, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                if (availableModels.size > 30) Text("更多模型可在上方ID输入框中选择/填写")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = enabled && !busy && !writeUncertain && list?.hasFileError != true, onClick = { confirmSave = true }) { Text("确认保存配置") }
-                    TextButton(enabled = !busy, onClick = { closeEditor() }) { Text("取消并清除输入密钥") }
-                }
-                if (writeUncertain) Text("本次写入结果不确定；请取消表单、刷新核心列表后再操作。")
+                        } catch (e: CancellationException) { throw e } catch (e: Exception) { if (current(session, sequence)) message = errorText(e) }
+                        finally { if (sequence == operationSequence) setBusy(false) } }
+                    }) { Text(if (provider.editable) "编辑" else "此类型暂仅支持查看") }
+                } }
             }
         }
     }
-    if (confirmSave) {
-        AlertDialog(onDismissRequest = { confirmSave = false }, title = { Text("保存提供商配置？") },
-            text = { Text("API Key将仅交给本App私有核心配置。请确认接口地址可信。本操作不做真实模型推理；编辑只修改已选字段，版本冲突时拒绝覆盖。") },
-            dismissButton = { TextButton(onClick = { confirmSave = false }) { Text("返回检查") } },
-            confirmButton = { TextButton(enabled = enabled && !busy, onClick = save@{
-                if (busy || !latestEnabled) return@save
-                val sessionId = NativeCoreSession.providerSessionId() ?: return@save
-                confirmSave = false; busy = true
-                val snapshot = editSnapshot
-                val inputId = id; val inputName = name; val inputUrl = chatUrl
-                val inputKey = apiKey; val inputModels = modelIds(); val changeModels = modelsTouched
-                val allowHttp = allowLoopbackHttp
-                apiKey = "" // the UI must not retain a submitted secret
-                scope.launch {
-                    var newDraft: ProviderCreateDraft? = null
-                    var editDraft: ProviderEditDraft? = null
-                    var saved = false
-                    try {
-                        // Draft construction/validation is caught, never thrown from the UI callback.
-                        if (snapshot == null) newDraft = ProviderCreateDraft(inputId, inputName, inputUrl, inputKey, inputModels, allowHttp)
-                        else editDraft = ProviderEditDraft(snapshot, name = inputName, chatUrl = inputUrl, apiKey = inputKey,
-                            modelIds = if (changeModels) inputModels else null, allowLoopbackHttp = allowHttp)
-                        withContext(Dispatchers.IO) {
-                            val client = NativeCoreSession.providerClient()
-                            val created = newDraft
-                            if (created != null) client.create(created) else client.edit(checkNotNull(editDraft))
-                        }
-                        saved = true
-                        if (latestEnabled && sessionId == NativeCoreSession.providerSessionId()) {
-                            open = false; editSnapshot = null; onProvidersChanged()
-                            list = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().getProviders() }
-                            message = "配置已保存，尚未调用真实模型；可刷新网关模型目录"
-                        }
-                    } catch (e: CancellationException) { throw e }
-                    catch (e: Exception) {
-                        if (saved) message = "配置保存已确认，但刷新列表失败；不要再次提交保存，请重新读取。"
-                        else { writeUncertain = e is ManagementExecutionUnknown; message = errorMessage(e) }
-                    } finally { newDraft?.clearSecret(); editDraft?.clearSecret(); apiKey = ""; busy = false }
+    if (open) Dialog(onDismissRequest = { if (!busy) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(enabled = !busy, onClick = ::close) { Text("返回") }
+                Text(if (snapshot == null) "新增提供商" else "编辑提供商", style = MaterialTheme.typography.titleLarge)
+            }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (snapshot == null) Row {
+                    TextButton(enabled = !busy, onClick = { newProvider("deepseek-api","DeepSeek API","https://api.deepseek.com") }) { Text("DeepSeek") }
+                    TextButton(enabled = !busy, onClick = { newProvider("openai-api","OpenAI API","https://api.openai.com/v1") }) { Text("OpenAI") }
                 }
-            }) { Text("保存，不进行推理") } })
+                OutlinedTextField(name, { name = it; nameTouched = true }, enabled = !busy, singleLine = true, label = { Text("显示名称（可自动生成）") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(baseUrl, { baseUrl = it }, enabled = !busy, singleLine = true, label = { Text("API Base URL") }, placeholder = { Text("https://api.example.com 或 .../v1") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
+                if (normalized.isNotEmpty()) Text("实际 Base URL：" + normalized, style = MaterialTheme.typography.bodySmall)
+                else if (baseUrl.isNotBlank()) Text("地址尚不合法：请检查HTTPS、端口和路径，不能在URL里携带密钥。", color = MaterialTheme.colorScheme.error)
+                OutlinedTextField(key, { key = it }, enabled = !busy, singleLine = true, label = { Text(if (snapshot == null) "API Key（目录公开时可暂留空）" else "新API Key（留空使用已存密钥）") },
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
+                    modifier = Modifier.fillMaxWidth().onFocusChanged { keyFocused = it.isFocused })
+                if (newOriginNeedsKey) Text("服务来源已改变，请明确填写新密钥；不会自动把旧密钥发到新地址。", color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "隐藏密钥" else "显示输入密钥") }
+                Text(if (discoveryLoading) "正在自动获取模型目录…" else if (discoveryDone) "目录已读取，可直接勾选模型" else "完成地址/密钥填写后自动读取模型，不发送推理", style = MaterialTheme.typography.bodySmall)
+                if (discoveryError.isNotEmpty()) { Text(discoveryError, color = MaterialTheme.colorScheme.error); TextButton(onClick = { focus.clearFocus(); retryCatalog++ }) { Text("重试获取目录") } }
+                Row {
+                    TextButton(enabled = modelOptions.isNotEmpty(), onClick = { selected = policy.chooseAll(); manualText = selected.joinToString("\n") }) { Text("全选") }
+                    TextButton(onClick = { selected = policy.chooseNone(); manualText = "" }) { Text("取消全选") }
+                    Text("已选 " + selected.size)
+                }
+                OutlinedTextField(modelSearch, { modelSearch = it }, singleLine = true, label = { Text("搜索模型") }, modifier = Modifier.fillMaxWidth())
+                val options = (modelOptions.map { it.id } + selected).distinct().filter { it.contains(modelSearch,true) }
+                if (options.size > 100) Text("匹配 " + options.size + " 个模型，仅展示前100个；请搜索定位，选择不会丢失")
+                options.take(100).forEach { model -> Row(Modifier.fillMaxWidth()) {
+                    Checkbox(model in selected, enabled = !busy, onCheckedChange = { selected = policy.toggle(model,it); manualText = selected.joinToString("\n") })
+                    val title = modelOptions.firstOrNull { it.id == model }?.name?.ifBlank { model } ?: model
+                    Column { Text(title); if (title != model) Text(model, style = MaterialTheme.typography.bodySmall)
+                        if (modelOptions.none { it.id == model }) Text("已保存的选择，当前目录未返回；不会自动删除", style = MaterialTheme.typography.bodySmall) }
+                } }
+                if (snapshot != null && policy.editedModels() == null) Text(if (snapshot?.noModels == true) "沿用已禁用模型" else if (snapshot?.modelIds?.isEmpty() == true) "沿用核心全部模型策略（未改选择）" else "保留原有模型选择", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "收起高级设置" else "高级设置 / 目录失败后手动补充") }
+                if (advanced) {
+                    OutlinedTextField(id, { id = it; idTouched = true }, enabled = snapshot == null && !busy, singleLine = true, label = { Text("内部标识（自动生成，已有不能改）") }, modifier = Modifier.fillMaxWidth())
+                    Row { Checkbox(localHttp, enabled = !busy, onCheckedChange = { localHttp = it }); Text("明确允许本机HTTP（外部仍须HTTPS）") }
+                    Row { Checkbox(manual, enabled = !busy, onCheckedChange = { manual = it }); Text("手动补充模型ID（仅备选）") }
+                    if (manual) OutlinedTextField(manualText, { manualText = it; selected = policy.manual(it.split(',', '\n').map(String::trim).filter(String::isNotEmpty)) }, label = { Text("已确认可用的模型ID，每行一个") }, modifier = Modifier.fillMaxWidth())
+                }
+                if (message.isNotEmpty()) Text(message, color = MaterialTheme.colorScheme.error)
+                Text("保存只更新配置，不验证推理。密钥不写日志；结果未知时先核对而不重发。", style = MaterialTheme.typography.bodySmall)
+            }
+            Button(modifier = Modifier.fillMaxWidth(), enabled = enabled && !operationBusy && !busy && listHealthy && !recoveryRequired && normalized.isNotEmpty() && !newOriginNeedsKey && !discoveryLoading &&
+                (snapshot != null || key.isNotBlank()) && (selected.isNotEmpty() || policy.editedModels()?.isEmpty() == true || (snapshot != null && policy.editedModels() == null)) && (snapshot != null || discoveryDone || manual),
+                onClick = { focus.clearFocus(); if (selected.isEmpty() && policy.editedModels()?.isEmpty() == true) confirmDisable = true else submit() }) { Text(if (busy) "保存中…" else "保存") }
+        } }
     }
+    if (confirmDisable) AlertDialog(onDismissRequest = { confirmDisable = false }, title = { Text("禁用全部模型？") }, text = { Text("此操作会明确禁用该提供商的全部模型，不是获取目录失败。") },
+        confirmButton = { TextButton(onClick = { confirmDisable = false; submit() }) { Text("确认禁用并保存") } }, dismissButton = { TextButton(onClick = { confirmDisable = false }) { Text("返回选择") } })
 }

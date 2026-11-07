@@ -49,7 +49,7 @@ func TestMobileCapabilitiesRequireManagementCookie(t *testing.T) {
 		}
 		want := map[string]any{"schemaVersion": float64(1), "coreVersion": Version, "mobile": true,
 			"loopbackKeys": true, "debugEndpoints": false, "adminLoopbackOnly": true, "nativeAutoUpdate": false,
-			"providerSchemaVersion": float64(1), "providerManagement": true}
+			"providerSchemaVersion": float64(1), "providerManagement": true, "providerModelDiscovery": true}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatal("capabilities schema differs")
 		}

@@ -82,7 +82,7 @@ class ProviderCreateDraftTest {
         val good = "http://127.0.0.1:4567/v1/chat/completions"
         assertFailsWith<IllegalArgumentException> { create(url = good) }
         assertEquals(good, create(url = good, local = true).chatUrl)
-        assertEquals("http://[::1]:4567/chat", create(url = "http://[::1]:4567/chat", local = true).chatUrl)
+        assertEquals("http://[::1]:4567/v1/chat/completions", create(url = "http://[::1]:4567/v1/chat/completions", local = true).chatUrl)
         for (url in listOf("http://127.0.0.1/chat", "http://localhost:4567/chat", "http://127.1:4567/chat",
             "http://2130706433:4567/chat", "http://127.0.0.1.evil:4567/chat", "http://192.168.1.1:4567/chat",
             "http://127.0.0.1:04567/chat", "http://[::1%25zone]:4567/chat", "http://evil@127.0.0.1:4567/chat")) {
@@ -97,8 +97,8 @@ class ProviderCreateDraftTest {
             "https://bad_host.example/chat", "https://api.example/%61pi/chat", "https://api.example/chat%3Fkey=secret")) {
             assertFailsWith<IllegalArgumentException> { create(url = url) }
         }
-        assertEquals("https://8.8.8.8/chat", create(url = "https://8.8.8.8/chat").chatUrl)
-        assertEquals("https://[2001:4860:4860::8888]/chat", create(url = "https://[2001:4860:4860::8888]/chat").chatUrl)
+        assertEquals("https://8.8.8.8/v1/chat/completions", create(url = "https://8.8.8.8/v1/chat/completions").chatUrl)
+        assertEquals("https://[2001:4860:4860::8888]/v1/chat/completions", create(url = "https://[2001:4860:4860::8888]/v1/chat/completions").chatUrl)
     }
 
     @Test fun modelLimitsCountRunesAndPreserveExplicitUnknownRawIds() {

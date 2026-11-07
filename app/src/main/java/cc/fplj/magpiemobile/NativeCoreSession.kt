@@ -20,6 +20,7 @@ object NativeCoreSession {
     private data class Binding(val owner: Long, val credential: ManagerCredential) {
         var connecting = false
         var config: GatewayConfig? = null
+        var providers: cc.fplj.magpiemobile.core.ProviderManagementClient? = null
     }
     private val lock = Any()
     private var binding: Binding? = null
@@ -109,7 +110,7 @@ object NativeCoreSession {
     fun providerClient(): cc.fplj.magpiemobile.core.ProviderManagementClient = synchronized(lock) {
         val current = binding ?: error("请先启动网关")
         check(isRunningOwner(current) && current.config != null) { "核心安全连接尚未完成" }
-        cc.fplj.magpiemobile.core.ProviderManagementClient(current.credential)
+        current.providers ?: cc.fplj.magpiemobile.core.ProviderManagementClient(current.credential).also { current.providers = it }
     }
 
     fun retry(filesDir: File) {
@@ -117,6 +118,6 @@ object NativeCoreSession {
         connect(owner, filesDir)
     }
 
-    private fun isRunningOwner(current: Binding): Boolean = GatewayRuntime.isCurrent(current.owner) &&
+    private fun isRunningOwner(current: Binding): Boolean = !GatewayRuntime.stopping.value && GatewayRuntime.isCurrent(current.owner) &&
         GatewayRuntime.status.value.phase == GatewayEngineController.Phase.RUNNING
 }

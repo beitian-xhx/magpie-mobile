@@ -216,16 +216,20 @@
       "sha256": "52b851547bcf392cc7466fcf3f6831830b0e76c78aeeaaf5604e250bcb7cd8ae"
     },
     {
+      "path": "internal/gui/mobile_discovery_test.go",
+      "sha256": "985413d1d130d7c0174abeb1095387245e16958e1a5db461933c8298a597b206"
+    },
+    {
       "path": "internal/gui/mobile_policy.go",
-      "sha256": "3b296e003a093fef8a4274d9c8844a989f010751a4e468cdb377e75ef1777943"
+      "sha256": "442eefdcb1fc73c2fff13cf5ab01fceb5fdec968bd2d3dab9926c31dfa161052"
     },
     {
       "path": "internal/gui/mobile_policy_test.go",
-      "sha256": "3bf76eda278bd05ca961c96aec74f60dd340bca0083bea502df4b65bca723eec"
+      "sha256": "d8bdaba052266de53ebe7e0529934278370b49579122e287ca03f5b55f414684"
     },
     {
       "path": "internal/gui/mobile_providers.go",
-      "sha256": "03d53e4d6c29d241d38ed38aaf3ce304709142f659cdb7ed87dc220b1d027d49"
+      "sha256": "37a2300d951a3e56eb3a8fde36b145c3fef23d4368d9a81462f161d03e8510e0"
     },
     {
       "path": "internal/gui/mobile_providers_test.go",
@@ -238,6 +242,14 @@
     {
       "path": "internal/mobilepolicy/enabled_mobile.go",
       "sha256": "4a0f3cb7dc5fcd7b38db82c9414cc8ec1d0abbb04ea8c28b06f3bb22d0f4dcbd"
+    },
+    {
+      "path": "internal/provider/mobile_discovery.go",
+      "sha256": "9266b190985cc0444d365d9bd97732a8cbd30d7d596cc71aec70413d3d10a0cd"
+    },
+    {
+      "path": "internal/provider/mobile_discovery_test.go",
+      "sha256": "e0fdb2ff409b285974387cc83593cb4efc446552a2af7ff100f6f2de397f191f"
     },
     {
       "path": "internal/provider/mobile_json.go",

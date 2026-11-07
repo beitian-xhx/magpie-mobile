@@ -1,9 +1,11 @@
 package cc.fplj.magpiemobile.core
 
 import org.junit.jupiter.api.Test
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SseChatParserTest {
@@ -38,7 +40,10 @@ class SseChatParserTest {
         val e = assertFailsWith<ChatException> {
             p.feedLine("data: {\"error\":{\"message\":\"quota\"}}")
         }
-        assertTrue(e.message!!.contains("quota"))
+        assertEquals("Stream SSE error", e.message)
+        assertEquals(200, e.httpCode)
+        assertNull(e.cause)
+        assertFalse(e.stackTraceToString().contains("quota"))
     }
 
     @Test
@@ -57,5 +62,50 @@ class SseChatParserTest {
         p.feedLine("data: {\"choices\":[{\"delta\":{\"content\":\"part1\"}}]}")
         // 流中断（没有 [DONE]）
         assertEquals("part1", p.fullText())
+    }
+
+    @Test
+    fun errorJsonInAnyShapeNeverExposesArbitraryApiKey() {
+        val key = "ordinary.provider.key/123+opaque-value"
+        val errors = listOf(
+            """{"message":"billing $key","APIKey":"$key","code":"$key","type":"$key","status":501}""",
+            """["$key",{"nested":{"APIKey":"$key"}}]""",
+            "\"$key\"",
+        )
+        for (error in errors) {
+            val p = SseChatParser { }
+            p.feedLine("""data: {"choices":[{"delta":{"content":"part"}}]}""")
+            val e = assertFailsWith<ChatException> { p.feedLine("data: {\"error\":$error}") }
+            assertEquals("Stream SSE error", e.message)
+            assertEquals(200, e.httpCode)
+            assertNull(e.cause)
+            assertEquals("part", p.fullText())
+            assertFalse(e.stackTraceToString().contains(key))
+            assertFalse(e.stackTraceToString().contains("billing"))
+            assertFalse(e.message!!.contains(error))
+        }
+    }
+
+    @Test
+    fun callbackExceptionsAreFixedFailuresWithPartialNotRawCauseOrHttp501() {
+        val key = "ordinary.callback.key/123+opaque-value"
+        for (failure in listOf(
+            ChatException("billing $key", 501),
+            IOException("billing $key"),
+            IllegalStateException("billing $key"),
+            StreamingChatException(StreamingChatFailure.IO_FAILURE, key, 501),
+        )) {
+            val p = SseChatParser { throw failure }
+            val e = assertFailsWith<StreamingChatException> {
+                p.feedLine("""data: {"choices":[{"delta":{"content":"part"}}]}""")
+            }
+            assertEquals(StreamingChatFailure.CALLBACK_FAILURE, e.failure)
+            assertEquals("Stream callback failure", e.message)
+            assertEquals("part", e.partialText)
+            assertEquals("part", p.fullText())
+            assertNull(e.httpCode)
+            assertNull(e.cause)
+            assertFalse(e.stackTraceToString().contains(key))
+        }
     }
 }

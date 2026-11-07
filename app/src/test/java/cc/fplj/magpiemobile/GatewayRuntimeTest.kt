@@ -30,6 +30,19 @@ class GatewayRuntimeTest {
         assertEquals(GatewayEngineController.Phase.STOPPED, GatewayRuntime.status.value.phase)
     }
 
+    @Test fun stopWaitsForCleanupAndBlocksStart() {
+        val owner = GatewayRuntime.attach()
+        GatewayRuntime.publish(owner, GatewayEngineController.Status(GatewayEngineController.Phase.RUNNING, "ready"))
+        GatewayRuntime.requestStop()
+        GatewayRuntime.publish(owner, GatewayEngineController.Status(GatewayEngineController.Phase.STOPPED, "only cancelled"))
+        assertEquals(true, GatewayRuntime.stopping.value)
+        assertFalse(GatewayRuntime.requestStart())
+        GatewayRuntime.cleanupCompleted(owner)
+        assertEquals(false, GatewayRuntime.stopping.value)
+        assertEquals(GatewayEngineController.Phase.STOPPED, GatewayRuntime.status.value.phase)
+        assertEquals(true, GatewayRuntime.requestStart())
+    }
+
     @Test fun diagnosticsRedactTheNativeWebLinkKey() {
         val owner = GatewayRuntime.attach()
         val key = "secretAdminLinkValue"

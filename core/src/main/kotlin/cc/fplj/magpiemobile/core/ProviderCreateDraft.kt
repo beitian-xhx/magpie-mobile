@@ -23,7 +23,7 @@ class ProviderCreateDraft(
 ) {
     val id: String = providerCreateId(id)
     val name: String = providerName(name)
-    val chatUrl: String = providerChatUrl(chatUrl, allowLoopbackHttp)
+    val chatUrl: String = ProviderBaseUrl.chatEndpoint(chatUrl, allowLoopbackHttp)
     val modelIds: List<String> = providerModelIds(modelIds)
     private var secret: String = apiKey
     private var submitted = false
@@ -64,7 +64,7 @@ class ProviderEditDraft(
     private val changedName = name?.let { providerName(it) }
     private val changedChat = chatUrl?.let {
         // A trusted unchanged loopback URL is not a new opt-in/change of endpoint.
-        if (it == snapshot.chatUrl) null else providerChatUrl(it, allowLoopbackHttp)
+        if (it == snapshot.chatUrl) null else ProviderBaseUrl.chatEndpoint(it, allowLoopbackHttp)
     }
     private val changedModels = modelIds?.let { providerModelIds(it) }
     private var secret = apiKey
