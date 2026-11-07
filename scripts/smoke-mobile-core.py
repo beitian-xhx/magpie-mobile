@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Host-only core integration: no provider secret, subscription or model inference."""
-import argparse,json,os,secrets,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error,http.server
+import argparse,json,os,secrets,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 def port():
@@ -32,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
     for directory in ['config','cache','tmp']: (root/directory).mkdir()
     vendor_calls={'get':0,'post':0}
     vendor_key='synthetic-provider-key-never-real'
-    class Vendor(http.server.BaseHTTPRequestHandler):
+    class Vendor(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
         def do_GET(self):
             vendor_calls['get']+=1
@@ -44,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
             self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
         def do_POST(self):
             vendor_calls['post']+=1;self.send_response(500);self.end_headers()
-    vendor=http.server.ThreadingHTTPServer(('127.0.0.1',0),Vendor)
+    vendor=ThreadingHTTPServer(('127.0.0.1',0),Vendor)
     threading.Thread(target=vendor.serve_forever,daemon=True).start()
     vendor_base='http://127.0.0.1:'+str(vendor.server_port)
     admin_port,gateway_port=port(),port()
