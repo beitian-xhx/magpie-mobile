@@ -18,7 +18,7 @@ def request(base,path,method='GET',body=None,headers=None):
     if data is not None: h['Content-Type']='application/json'
     req=urllib.request.Request(base+path,data=data,headers=h,method=method)
     try:
-        with http.open(req,timeout=1) as r: return r.status,r.read(65537)
+        with http.open(req,timeout=5) as r: return r.status,r.read(65537)
     except urllib.error.HTTPError as e: return e.code,e.read(65537)
 
 def is_listening(p):
