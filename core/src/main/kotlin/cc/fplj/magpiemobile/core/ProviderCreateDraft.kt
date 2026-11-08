@@ -25,7 +25,10 @@ class ProviderCreateDraft(
     val name: String = providerName(name)
     // The core appends "/chat/completions" to the saved value, so store the base only.
     // Accepting a pasted full endpoint here would otherwise produce a doubled path (404).
-    val chatUrl: String = ProviderBaseUrl.normalize(providerChatUrl(chatUrl, allowLoopbackHttp))
+    // The core appends "/chat/completions" to the saved value, so store the base only.
+    // Normalize first (adds a scheme / drops a pasted endpoint), then apply the caller's
+    // explicit loopback-HTTP opt-in to the canonical result.
+    val chatUrl: String = providerChatUrl(ProviderBaseUrl.normalize(chatUrl), allowLoopbackHttp)
     val modelIds: List<String> = providerModelIds(modelIds)
     private var secret: String = apiKey
     private var submitted = false
@@ -75,7 +78,7 @@ class ProviderEditDraft(
         // A trusted unchanged loopback URL is not a new opt-in/change of endpoint.
         if (it == snapshot.chatUrl) null
         // Same base-only rule as creation: the core appends the protocol path itself.
-        else ProviderBaseUrl.normalize(providerChatUrl(it, allowLoopbackHttp))
+        else providerChatUrl(ProviderBaseUrl.normalize(it), allowLoopbackHttp)
     }
     private val changedModels = modelIds?.let { providerModelIds(it) }
     private var secret = apiKey

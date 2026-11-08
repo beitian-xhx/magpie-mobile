@@ -29,10 +29,12 @@ class ProviderCreateDraftTest {
         assertEquals(JsonPrimitive("https://api.example/custom/v1"), custom["chat"])
     }
 
-    @Test fun editOfFullEndpointSnapshotKeepsSingleBaseAndSendsNoDoubledPath() {
+    @Test fun editRepairsFullEndpointSnapshotBySendingTheBase() {
         val old = snapshot()
-        val body = ProviderEditDraft(old, chatUrl = "https://api.example/v1/chat/completions").requestBody()
-        assertFalse(body.containsKey("chat"))
+        // The editor shows the normalized base, so a rename sends the repaired base once.
+        val body = ProviderEditDraft(old, name = "Renamed", chatUrl = "https://api.example/v1").requestBody()
+        assertEquals(JsonPrimitive("https://api.example/v1"), body["chat"])
+        assertFalse(body["chat"].toString().contains("/chat/completions"))
     }
 
     @Test fun creationIsExactlyCreateOnlySevenFieldsWithNewTrueAndRawModelIds() {

@@ -278,11 +278,11 @@ class ProviderModelDiscoveryTest {
     }
     @Test fun createAndDirtyUrlSaveUseNormalizedCompleteChatWhileNameOnlyPreservesOldProfile() {
         val created = ProviderCreateDraft("new-provider", "Name", "api.example/custom/v1", ProviderApiFixture.API_KEY, emptyList())
-        assertEquals("https://api.example/custom/v1/chat/completions", created.chatUrl)
+        assertEquals("https://api.example/custom/v1", created.chatUrl)
         val old = ProviderEditSnapshot("custom-api", "a".repeat(64), "Old", "https://api.example/chat/completions",
             emptyList(), false, ProviderKeyMetadata(true, false, true))
         assertFalse(ProviderEditDraft(old, name = "Name", chatUrl = old.chat).requestBody().containsKey("chat"))
-        assertEquals(JsonPrimitive("https://api.example/v1/chat/completions"), ProviderEditDraft(old, chatUrl = "api.example/v1").requestBody()["chat"])
+        assertEquals(JsonPrimitive("https://api.example/v1"), ProviderEditDraft(old, chatUrl = "api.example/v1").requestBody()["chat"])
     }
     @Test fun fixedDnsTlsAndResponseHeadersProduceSafeSpecificMessages() {
         val cases = listOf(
