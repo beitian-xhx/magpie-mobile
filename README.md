@@ -2,7 +2,11 @@
 
 完整范围见 [移植计划](plan.md)。用户确认0.1.1在当前手机启停正常；本项目仍不是主要GUI功能完整覆盖版。
 
-## 当前版本：0.1.7-chat-base
+## 当前版本：0.1.8-sessions（CI/真机验收分开）
+
+新增 [原生会话存储](docs/session-storage.md)：Room 会话/消息/操作状态、离线历史分页、成功上下文恢复。旧 JSONL 导入只读存档且保留原文件，不把混合旧记录当上下文。中断/失败不自动重发，旋转由 ViewModel 持有请求；新建会话保留历史。本阶段未包含 DataStore、SAF/M4 加密备份。
+
+0.1.8 起使用 GitHub Secrets 固定 Release 签名，缺少 Secret/证书不符时 CI 拒绝发布。旧 0.1.6/0.1.7 的 Debug 公钥已核验彼此不同，新签名无法覆盖旧包；请保留旧应用，不卸载或清数据，迁移另行确认。
 
 修正Android目录网络失败：Android核心以NDK/CGO=1使用Bionic系统DNS，系统证书同时读取Conscrypt APEX与system路径，保留TLS校验。DNS、证书、网络、响应异常分开给出安全固定错误；不硬编码DNS或关闭证书校验。
 
@@ -32,4 +36,4 @@ Actions执行Python应用器、JVM、Go安全/目录、真实host fake-vendor GE
 
 [UX审查记录](docs/ux-review-0.1.4.md)区分已修改与仍需真机确认的键盘/小屏/通知/复杂类型场景。
 
-真实API/订阅推理需额外预算授权；多协议/订阅、M4/DB/高级路由统计插件、长时后台多系统/16KB和完整许可分发仍按计划推进。
+真实API/订阅推理需额外预算授权；多协议/订阅、DataStore/SAF/M4加密备份、完整Sessions/高级路由统计插件、长时后台多系统/16KB和完整许可分发仍按计划推进。

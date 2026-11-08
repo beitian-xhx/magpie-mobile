@@ -20,12 +20,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,14 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cc.fplj.magpiemobile.core.EnginePaths
-import cc.fplj.magpiemobile.core.GatewayConfig
 import cc.fplj.magpiemobile.core.GatewayEngineController
 import cc.fplj.magpiemobile.core.ModelsClient
 import cc.fplj.magpiemobile.core.SecretRedactor
-import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -79,7 +72,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
-        ChatSessionHolder.chatFilePath = File(filesDir, "chat.jsonl").absolutePath
         try {
             healthServer = HealthServer(infoProvider = {
                 val status = GatewayRuntime.status.value
@@ -142,12 +134,11 @@ fun Dashboard(
     var log by remember { mutableStateOf("") }
     var modelsText by remember { mutableStateOf("（未加载）") }
     var modelIds by remember { mutableStateOf(emptyList<String>()) }
-    var selectedModel by remember { mutableStateOf("") }
+    val chatViewModel: ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val chat by chatViewModel.state.collectAsStateWithLifecycle()
+    val sending = chat.sending
+    var selectedModel by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var loadingModels by remember { mutableStateOf(false) }
-    var sending by remember { mutableStateOf(false) }
-    var chatInput by remember { mutableStateOf("") }
-    var chatOut by remember { mutableStateOf("") }
-    var modelMenu by remember { mutableStateOf(false) }
     var providerBusy by remember { mutableStateOf(false) }
     var catalogRevision by remember { mutableStateOf(0) }
     var catalogRequest by remember { mutableStateOf(0L) }
@@ -224,51 +215,7 @@ fun Dashboard(
                 Text(if (clientReady) modelsText else "请先完成核心安全连接；端口就绪不代表已配置渠道和核心密钥", style = MaterialTheme.typography.bodySmall)
             }
         }
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("聊天测试（流式）", style = MaterialTheme.typography.titleSmall)
-                Text("上下文会发送给当前模型；实际发送可能消耗渠道额度。", style = MaterialTheme.typography.bodySmall)
-                TextButton(enabled = !sending && !providerBusy, onClick = { ChatSessionHolder.newConversation(); chatOut = "" }) { Text("新会话（清空上下文）") }
-                Button(enabled = modelIds.isNotEmpty() && !sending, onClick = { modelMenu = true }) {
-                    Text(if (selectedModel.isBlank()) "请选择模型" else modelLabels[selectedModel] ?: selectedModel)
-                }
-                DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
-                    modelIds.forEach { id ->
-                        DropdownMenuItem(text = { Column { Text(modelLabels[id] ?: id); if (modelLabels[id] != id) Text(id, style = MaterialTheme.typography.bodySmall) } }, onClick = { selectedModel = id; modelMenu = false })
-                    }
-                }
-                OutlinedTextField(value = chatInput, onValueChange = { chatInput = it }, enabled = !sending,
-                    modifier = Modifier.fillMaxWidth(), placeholder = { Text("输入消息…") })
-                Button(enabled = clientReady && catalogValid && !providerBusy && !sending && chatInput.isNotBlank() && selectedModel in modelIds, onClick = {
-                    val text = chatInput
-                    val model = selectedModel
-                    sending = true
-                    chatOut = ""
-                    scope.launch {
-                        val deltas = Channel<String>(Channel.UNLIMITED)
-                        val render = launch { for (delta in deltas) chatOut += delta }
-                        try {
-                            val cfg = NativeCoreSession.gatewayConfig()
-                            val session = ChatSessionHolder.get(cfg)
-                            val reply = withContext(Dispatchers.IO) { session.send(text, model) { delta -> deltas.trySend(delta) } }
-                            deltas.close(); render.join() // flush all deltas before final text; no delayed Handler replay
-                            chatOut = reply
-                            chatInput = "" // clear only after successful reply; failed messages remain editable
-                        } catch (e: CancellationException) { throw e }
-                        catch (e: Exception) {
-                            deltas.close(); render.join()
-                            val status = when (e) {
-                                is cc.fplj.magpiemobile.core.ChatException -> "HTTP " + e.httpCode
-                                is cc.fplj.magpiemobile.core.StreamingChatException -> e.httpCode?.let { "HTTP " + it } ?: "网络或流式中断"
-                                else -> "请求未能完成"
-                            }
-                            chatOut += "\n发送失败（" + status + "），草稿已保留；未自动重发。请检查凭据/额度/网络后手动发送。"
-                        } finally { deltas.close(); render.cancel(); sending = false }
-                    }
-                }) { Text(if (sending) "发送中…" else "发送") }
-                if (chatOut.isNotEmpty()) Text(chatOut, style = MaterialTheme.typography.bodySmall)
-            }
-        }
+        ChatPanel(chatViewModel, modelIds, modelLabels, selectedModel, { selectedModel = it }, clientReady && catalogValid, providerBusy)
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Button(onClick = {
@@ -297,26 +244,5 @@ fun Dashboard(
                 if (log.isNotEmpty()) Text(log, style = MaterialTheme.typography.bodySmall)
             }
         }
-    }
-}
-
-object ChatSessionHolder {
-    private var cached: cc.fplj.magpiemobile.core.StreamingChatSession? = null
-    private var cachedConfig: GatewayConfig? = null
-    var chatFilePath: String = ""
-    @Synchronized
-    fun invalidate() { cached = null; cachedConfig = null }
-
-    @Synchronized
-    fun newConversation() { cached?.reset() }
-
-    @Synchronized
-    fun get(cfg: GatewayConfig): cc.fplj.magpiemobile.core.StreamingChatSession {
-        if (cachedConfig == cfg) cached?.let { return it }
-        check(chatFilePath.isNotBlank()) { "会话目录尚未初始化" }
-        return cc.fplj.magpiemobile.core.StreamingChatSession(
-            cc.fplj.magpiemobile.core.StreamingChatClient(cfg), cc.fplj.magpiemobile.core.ChatClient(cfg),
-            cc.fplj.magpiemobile.core.SessionStore(File(chatFilePath)), defaultModel = "",
-        ).also { cached = it; cachedConfig = cfg }
     }
 }

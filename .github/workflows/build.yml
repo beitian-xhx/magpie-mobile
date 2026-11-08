@@ -45,6 +45,7 @@ jobs:
           python3 scripts/check-startup-contract.py
           python3 scripts/check-model-discovery-trigger.py
           python3 scripts/check-android-network-build.py
+          python3 scripts/test_apk_signature.py
 
       - name: Apply exact hash-pinned mobile core patch
         run: |
@@ -68,6 +69,7 @@ jobs:
             core/build/reports/tests/test/
             app/build/test-results/testDebugUnitTest/
             app/build/reports/tests/testDebugUnitTest/
+            app/schemas/
           if-no-files-found: warn
 
       - name: Run actual mobile Go safety tests
@@ -119,8 +121,26 @@ jobs:
             build-tmp/mobile-core-build-info.txt
           if-no-files-found: warn
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Restore fixed release signing key
+        env:
+          MAGPIE_SIGNING_KEY_B64: ${{ secrets.MAGPIE_SIGNING_KEY_B64 }}
+          MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$MAGPIE_SIGNING_KEY_B64" && test -n "$MAGPIE_SIGNING_PASSWORD"
+          umask 077
+          printf '%s' "$MAGPIE_SIGNING_KEY_B64" | base64 --decode > "${RUNNER_TEMP:?}/magpie-release.jks"
+
+      - name: Build fixed-signed release APK
+        env:
+          MAGPIE_SIGNING_STORE: ${{ runner.temp }}/magpie-release.jks
+          MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Verify pinned APK signing certificate
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-apk-signature.py --apk app/build/outputs/apk/release/app-release.apk --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" | tee build-tmp/apk-signature.txt
 
       - name: Verify APK contains exactly the rebuilt core
         run: |
@@ -130,7 +150,7 @@ jobs:
           assert native[:4] == b'\x7fELF' and native[4] == 2
           assert struct.unpack_from('<H', native, 16)[0] == 3, 'expected ELF PIE'
           assert struct.unpack_from('<H', native, 18)[0] == 183, 'expected AArch64'
-          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as z:
+          with zipfile.ZipFile('app/build/outputs/apk/release/app-release.apk') as z:
               packaged = z.read('lib/arm64-v8a/libmagpie_exec.so')
           assert hashlib.sha256(packaged).digest() == hashlib.sha256(native).digest()
           print('PASS: packaged mobile core matches exact CI build', hashlib.sha256(native).hexdigest())
@@ -140,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: magpie-mobile-poc-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
       - name: Publish APK to public release
@@ -148,12 +168,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v0.1.7-chat-base-${GITHUB_SHA:0:8}"
-          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.7-chat-base.apk
-          sha256sum magpie-mobile-0.1.7-chat-base.apk | tee magpie-mobile-0.1.7-chat-base.apk.sha256
+          tag="v0.1.8-sessions-${GITHUB_SHA:0:8}"
+          cp app/build/outputs/apk/release/app-release.apk magpie-mobile-0.1.8-sessions.apk
+          sha256sum magpie-mobile-0.1.8-sessions.apk | tee magpie-mobile-0.1.8-sessions.apk.sha256
           printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.4 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
-          cat build-tmp/mobile-core.sha256 >> build-info.txt
+          cat build-tmp/mobile-core.sha256 build-tmp/apk-signature.txt >> build-info.txt
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "0.1.7 提供商 Chat 地址归一化 (${GITHUB_SHA:0:8})" --notes "修复提供商保存了完整 /chat/completions 端点导致网关二次拼接返回HTTP404：现在只保存Base URL，编辑页自动归一化并在下次保存修复旧配置。保留自动模型目录、严格鉴权与不自动重放。JVM/Go/host回归及APK由CI验证；未执行真实推理，手机与真实渠道另行验收。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create "$tag" --title "0.1.8 原生会话持久化 (${GITHUB_SHA:0:8})" --notes "新增Room本机会话/消息/操作状态、历史分页与成功上下文恢复。旧JSONL只读迁移并保留原文件，中断或失败请求不自动重发；旋转由ViewModel持有发送。本阶段不包含DataStore/SAF/加密备份，未执行真实推理。JVM（含Room/Robolectric）/Go/host回归及APK由CI验证，手机另行验收。本版首次采用GitHub Secrets固定Release签名；旧版临时Debug证书不同则不能覆盖升级，请保留旧App，不卸载或清数据。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
           fi
-          gh release upload "$tag" magpie-mobile-0.1.7-chat-base.apk magpie-mobile-0.1.7-chat-base.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber
+          gh release upload "$tag" magpie-mobile-0.1.8-sessions.apk magpie-mobile-0.1.8-sessions.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber
