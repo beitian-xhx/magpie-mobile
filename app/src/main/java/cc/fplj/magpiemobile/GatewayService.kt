@@ -17,6 +17,8 @@ import cc.fplj.magpiemobile.core.EngineEnvironment
 import cc.fplj.magpiemobile.core.EnginePaths
 import cc.fplj.magpiemobile.core.GatewayEngineController
 import cc.fplj.magpiemobile.core.PayloadVerifier
+import cc.fplj.magpiemobile.preferences.AppUiPreferences
+import cc.fplj.magpiemobile.preferences.GatewayIntent
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -54,14 +56,37 @@ class GatewayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP || GatewayRuntime.mustStop()) {
-            GatewayRuntime.requestStop()
-            controller?.stop()
-            stopSelf()
-            return START_NOT_STICKY
+        val decision = GatewayActionPolicy.decide(
+            action = intent?.action,
+            mustStop = GatewayRuntime.mustStop(),
+            foregroundReady = foregroundReady,
+            hasController = controller != null,
+            // Retry/redelivery or unknown delivery flags never authorize another launch.
+            isReplay = flags != 0,
+        )
+        when (decision.operation) {
+            GatewayActionPolicy.Operation.STOP -> {
+                // Stop immediately; no preference await or persistence retry may delay shutdown.
+                GatewayRuntime.requestStop()
+                controller?.stop()
+                stopSelf()
+                if (decision.recordStopIntent) {
+                    try {
+                        // This only enqueues a process-owned FIFO write; it does not wait for disk.
+                        AppUiPreferences.open(applicationContext).recordGatewayIntent(GatewayIntent.STOP)
+                    } catch (_: Exception) {
+                        Log.w("MagpieGateway", "网关停止意图记录失败；网关停止不受影响")
+                    }
+                }
+                return START_NOT_STICKY
+            }
+            GatewayActionPolicy.Operation.STOP_SELF -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            GatewayActionPolicy.Operation.KEEP_RUNNING -> return START_NOT_STICKY
+            GatewayActionPolicy.Operation.START -> Unit
         }
-        if (!foregroundReady) return START_NOT_STICKY
-        if (controller != null) return START_NOT_STICKY // repeated taps cannot create parallel children
         controller = GatewayEngineController(
             launch = {
                 val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
@@ -152,7 +177,8 @@ class GatewayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        const val ACTION_STOP = "cc.fplj.magpiemobile.STOP_GATEWAY"
+        const val ACTION_START = GatewayActionPolicy.ACTION_START
+        const val ACTION_STOP = GatewayActionPolicy.ACTION_STOP
         private const val CHANNEL_ID = "magpie_gateway"
         private const val NOTIFICATION_ID = 41
 

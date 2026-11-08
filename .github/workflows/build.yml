@@ -171,12 +171,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v0.1.8-sessions-${GITHUB_SHA:0:8}"
-          cp app/build/outputs/apk/release/app-release.apk magpie-mobile-0.1.8-sessions.apk
-          sha256sum magpie-mobile-0.1.8-sessions.apk | tee magpie-mobile-0.1.8-sessions.apk.sha256
+          tag="v0.1.9-ui-state-${GITHUB_SHA:0:8}"
+          cp app/build/outputs/apk/release/app-release.apk magpie-mobile-0.1.9-ui-state.apk
+          sha256sum magpie-mobile-0.1.9-ui-state.apk | tee magpie-mobile-0.1.9-ui-state.apk.sha256
           printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.4 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
           cat build-tmp/mobile-core.sha256 build-tmp/apk-signature.txt >> build-info.txt
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "0.1.8 原生会话持久化 (${GITHUB_SHA:0:8})" --notes "新增Room本机会话/消息/操作状态、历史分页与成功上下文恢复。旧JSONL只读迁移并保留原文件，中断或失败请求不自动重发；旋转由ViewModel持有发送。本阶段不包含DataStore/SAF/加密备份，未执行真实推理。JVM（含Room/Robolectric）/Go/host回归及APK由CI验证，手机另行验收。本版首次采用GitHub Secrets固定Release签名；旧版临时Debug证书不同则不能覆盖升级，请保留旧App，不卸载或清数据。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
           fi
-          gh release upload "$tag" magpie-mobile-0.1.8-sessions.apk magpie-mobile-0.1.8-sessions.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber
+          gh release upload "$tag" magpie-mobile-0.1.9-ui-state.apk magpie-mobile-0.1.9-ui-state.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber

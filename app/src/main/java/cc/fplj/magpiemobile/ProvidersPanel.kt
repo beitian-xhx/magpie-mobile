@@ -27,7 +27,13 @@ import kotlinx.coroutines.withContext
 
 /** Only nonsecret write-recovery flags are saveable. Password fields/drafts stay ephemeral. */
 @Composable
-fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChanged: (Boolean) -> Unit = {}, onProvidersChanged: () -> Unit) {
+fun ProvidersPanel(
+    enabled: Boolean,
+    operationBusy: Boolean = false,
+    onBusyChanged: (Boolean) -> Unit = {},
+    onProvidersChanged: () -> Unit,
+    cacheViewModel: ProviderListCacheViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+) {
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val latestEnabled by rememberUpdatedState(enabled)
@@ -65,7 +71,14 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
     var pendingProviderId by rememberSaveable { mutableStateOf("") }
     var confirmDisable by remember { mutableStateOf(false) }
     val owner = if (enabled) NativeCoreSession.providerSessionId() else null
-    fun setBusy(value: Boolean) { busy = value; onBusyChanged(value) }
+
+    // 导航守卫：busy、open (编辑Dialog打开) 或 recoveryRequired 时均锁住外层 Tab 切换
+    val isLocked = busy || open || recoveryRequired
+    LaunchedEffect(isLocked) {
+        onBusyChanged(isLocked)
+    }
+    fun setBusy(value: Boolean) { busy = value }
+
     fun current(session: Long?, sequence: Long): Boolean = latestEnabled && session != null &&
         session == NativeCoreSession.providerSessionId() && sequence == operationSequence
     fun errorText(e: Exception): String = when (e) {
@@ -79,13 +92,15 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
         is IllegalArgumentException -> e.message ?: "请检查表单字段"
         else -> "操作失败，请重试读取；不会自动重复保存。"
     }
-    fun refresh() {
-        if (!enabled || busy) return
+    fun refresh(force: Boolean = false) {
+        if (!enabled || busy || owner == null) return
         val session = owner; val sequence = ++operationSequence
         listHealthy = false; setBusy(true)
         scope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().getProviders() }
+                val result = cacheViewModel.read(session, force = force) {
+                    NativeCoreSession.providerClient().getProviders()
+                }
                 if (current(session, sequence)) {
                     providers = result; listHealthy = !result.hasFileError
                     if (listHealthy) { recoveryRequired = false; pendingProviderId = ""; message = "" }
@@ -106,7 +121,7 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
     }
     LaunchedEffect(enabled, owner) {
         if (!enabled) { key = ""; discoveryLoading = false; listHealthy = false; setBusy(false); message = "核心已断开，草稿名称、地址与选择已保留；重连后请补充密钥" }
-        else refresh()
+        else refresh(force = false)
     }
     val normalized = try { ProviderBaseUrl.normalize(baseUrl) } catch (_: Exception) { "" }
     val newOriginNeedsKey = snapshot != null && key.isBlank() && normalized.isNotEmpty() && run {
@@ -171,7 +186,10 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
                 if (current(session, sequence)) {
                     recoveryRequired = false; pendingProviderId = ""; close(); onProvidersChanged()
                     message = "已保存；正在自动刷新目录，尚未验证真实推理"
-                    val latest = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().getProviders() }
+                    cacheViewModel.invalidate()
+                    val latest = cacheViewModel.read(session, force = true) {
+                        NativeCoreSession.providerClient().getProviders()
+                    }
                     if (current(session, sequence)) { providers = latest; listHealthy = !latest.hasFileError; message = "配置已保存" }
                 }
             } catch (e: CancellationException) { throw e } // pending nonsecret marker survives cancellation/recreation
@@ -187,7 +205,7 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("提供商", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = enabled && !busy, onClick = ::refresh) { Text(if (recoveryRequired) "核对保存结果" else "刷新") }
+                Button(enabled = enabled && !busy, onClick = { refresh(force = true) }) { Text(if (recoveryRequired) "核对保存结果" else "刷新") }
                 Button(enabled = enabled && listHealthy && !busy && !operationBusy && !recoveryRequired, onClick = { newProvider() }) { Text("新增提供商") }
             }
             if (message.isNotEmpty()) Text(message, style = MaterialTheme.typography.bodySmall)
