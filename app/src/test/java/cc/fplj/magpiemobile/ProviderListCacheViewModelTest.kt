@@ -151,7 +151,7 @@ class ProviderListCacheViewModelTest {
         val callerJob = scope.launch {
             vm.read(1L, force = false) {
                 entered.complete(Unit)
-                runBlocking { release.await() }
+                release.await()
                 fetchSnapshot()
             }
         }

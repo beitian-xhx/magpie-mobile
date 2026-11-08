@@ -32,7 +32,7 @@ class ProviderListCacheViewModel(
     suspend fun read(
         owner: Long,
         force: Boolean = false,
-        fetch: () -> ProviderListSnapshot,
+        fetch: suspend () -> ProviderListSnapshot,
     ): ProviderListSnapshot {
         val task = mutex.withLock {
             if (this.owner != owner) {
