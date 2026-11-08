@@ -42,10 +42,10 @@ class ConfigBackupManagerTest {
         val exportedBytes = out.toByteArray()
         assertTrue(exportedBytes.isNotEmpty())
         val jsonText = exportedBytes.toString(Charsets.UTF_8)
-        assertTrue(jsonText.contains(""schemaVersion": 1"))
-        assertTrue(jsonText.contains(""appName": "Magpie-Mobile""))
-        assertTrue(jsonText.contains(""custom-openai""))
-        assertTrue(jsonText.contains(""DARK""))
+        assertTrue(jsonText.contains("schemaVersion"))
+        assertTrue(jsonText.contains("Magpie-Mobile"))
+        assertTrue(jsonText.contains("custom-openai"))
+        assertTrue(jsonText.contains("DARK"))
         assertFalse(jsonText.contains("sk-"))
 
         val inStream = ByteArrayInputStream(exportedBytes)
@@ -133,7 +133,8 @@ class ConfigBackupManagerTest {
         }
 
         // Tamper only sha256
-        val tamperedSha = normalText.replace(Regex(""sha256": "[0-9a-f]+""), ""sha256": "0000000000000000000000000000000000000000000000000000000000000000"")
+        val tamperedSha = normalText.substringBefore("sha256") + "\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\"\n}"
+}"
         assertFailsWith<BackupChecksumMismatchException> {
             ConfigBackupManager.import(ByteArrayInputStream(tamperedSha.toByteArray(Charsets.UTF_8)))
         }
@@ -157,7 +158,7 @@ class ConfigBackupManagerTest {
         val out = ByteArrayOutputStream()
         ConfigBackupManager.export(out, sampleProviders, samplePreferences, fixedTime)
         val normalText = out.toString(Charsets.UTF_8)
-        val futureSchema = normalText.replace(""schemaVersion": 1", ""schemaVersion": 2")
+        val futureSchema = normalText.replaceFirst("schemaVersion\": 1", "schemaVersion\": 2")
         assertFailsWith<BackupValidationException> {
             ConfigBackupManager.import(ByteArrayInputStream(futureSchema.toByteArray(Charsets.UTF_8)))
         }
