@@ -107,6 +107,16 @@ object NativeCoreSession {
         binding?.takeIf { isRunningOwner(it) && it.config != null }?.owner
     }
 
+    fun currentGatewayKey(): String? = synchronized(lock) {
+        binding?.takeIf { isRunningOwner(it) }?.config?.gatewayKey
+    }
+
+    fun managementClient(): cc.fplj.magpiemobile.core.CoreManagementClient = synchronized(lock) {
+        val current = binding ?: error("请先启动网关")
+        check(isRunningOwner(current) && current.config != null) { "核心安全连接尚未完成" }
+        cc.fplj.magpiemobile.core.CoreManagementClient(current.credential)
+    }
+
     fun providerClient(): cc.fplj.magpiemobile.core.ProviderManagementClient = synchronized(lock) {
         val current = binding ?: error("请先启动网关")
         check(isRunningOwner(current) && current.config != null) { "核心安全连接尚未完成" }
