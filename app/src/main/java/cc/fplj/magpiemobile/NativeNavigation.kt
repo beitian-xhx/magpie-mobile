@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -42,6 +43,8 @@ fun Dashboard(
     val chat by chatViewModel.state.collectAsStateWithLifecycle()
     val keysViewModel: GatewayKeysViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val keysState by keysViewModel.state.collectAsStateWithLifecycle()
+    val usageViewModel: UsageViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val usageState by usageViewModel.state.collectAsStateWithLifecycle()
     var providerBusy by remember { mutableStateOf(false) }
     var diagnosing by remember { mutableStateOf(false) }
     var diagnostic by remember { mutableStateOf("") } // Never DataStore/Bundle.
@@ -57,6 +60,9 @@ fun Dashboard(
         appShell.connectionChanged()
         if (clientReady) {
             keysViewModel.refresh()
+            usageViewModel.refresh(5)
+        } else {
+            usageViewModel.clear()
         }
     }
     BackHandler(enabled = shell.page != AppPage.GATEWAY) {
@@ -132,6 +138,11 @@ fun Dashboard(
                             clientReady = clientReady,
                             viewModel = keysViewModel,
                             keysState = keysState
+                        )
+                        RecentRequestsCard(
+                            clientReady = clientReady,
+                            viewModel = usageViewModel,
+                            usageState = usageState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -407,6 +418,81 @@ private fun GatewayKeysCard(
                 if (notice.isNotEmpty()) {
                     Text(notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentRequestsCard(
+    clientReady: Boolean,
+    viewModel: UsageViewModel,
+    usageState: UsageUiState,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("近期请求速览 (Recent Requests)", style = MaterialTheme.typography.titleMedium)
+                if (clientReady) {
+                    TextButton(enabled = !usageState.loading, onClick = { viewModel.refresh(5) }) {
+                        Text(if (usageState.loading) "刷新中…" else "刷新")
+                    }
+                }
+            }
+            Text(
+                "展示网关近期通过的 API 请求指标（时间、模型、状态、耗时与 Token 统计；严格零正文记录）。",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            if (!clientReady) {
+                Text("网关运行且完成安全连接后自动开始记录。", style = MaterialTheme.typography.bodySmall)
+            } else if (usageState.requests.isEmpty() && !usageState.loading) {
+                Text("暂无近期请求记录（向网关端点发送请求后将在此显示）。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                usageState.requests.take(5).forEach { req ->
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                val modelName = req.model.ifBlank { "unknown" }
+                                val providerPart = if (req.provider.isNotBlank()) " [" + req.provider + "]" else ""
+                                Text(modelName + providerPart, style = MaterialTheme.typography.bodyMedium)
+                                val timeText = if (req.timestamp.isNotBlank()) req.timestamp.take(19).replace('T', ' ') else "刚刚"
+                                Text(
+                                    timeText + " · " + req.durationMs + "ms",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                val isSuccess = req.statusCode in 200..299
+                                Text(
+                                    "" + req.statusCode,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    "" + req.totalTokens + " tokens",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (usageState.error.isNotEmpty()) {
+                Text(usageState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

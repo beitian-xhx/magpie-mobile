@@ -108,6 +108,13 @@ class CoreManagementClient(
         return decode { json.parseToJsonElement(body).jsonObject }
     }
 
+    /** Recent request audit trail from management plane (zero request/response body leakage). */
+    fun recentRequests(limit: Int = 5): List<UsageRecord> {
+        require(limit in 1..50) { "limit 必须在 1..50" }
+        val body = transport.request("GET", "/api/usage/requests?limit=$limit")
+        return UsageClient.parseUsageRecords(body)
+    }
+
     private fun <T> decode(block: () -> T): T = try {
         block()
     } catch (_: Exception) {

@@ -108,6 +108,16 @@ class CoreManagementClientTest {
         assertNull(post.origin)
     }
 
+    @Test fun recentRequestsReturnsParsedList() {
+        val list = api.client().recentRequests(5)
+        assertEquals(1, list.size)
+        assertEquals("req-1", list[0].id)
+        assertEquals("gpt-4o", list[0].model)
+        assertEquals(200, list[0].statusCode)
+        assertEquals(150L, list[0].durationMs)
+        assertEquals(42, list[0].totalTokens)
+    }
+
     @Test fun copyKeyUsesIdAndTopLevelSecretWithoutRotating() {
         api.keys = listOf(RegisteredGatewayKey("owned-id", GatewayKeyProvisioner.RESERVED_NAME, ManagementApiFixture.SECRET))
         val key = api.client().copyCallerKey("owned-id")
@@ -270,6 +280,7 @@ internal class ManagementApiFixture : AutoCloseable {
                 } else when (exchange.requestMethod + " " + exchange.requestURI.path) {
                     "GET /api/mobile/capabilities" -> respond(exchange, 200, capabilitiesBody)
                     "GET /api/state" -> respond(exchange, 200, """{"anything":{"nested":[1,2,3]},"version":7}""")
+                    "GET /api/usage/requests" -> respond(exchange, 200, """{"requests":[{"id":"req-1","model":"gpt-4o","status":200,"duration":150,"total_tokens":42}]}""")
                     "GET /api/caller-keys" -> {
                         listRequests.incrementAndGet()
                         val handler = listHandler

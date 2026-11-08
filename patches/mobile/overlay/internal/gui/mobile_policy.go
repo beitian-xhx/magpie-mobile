@@ -33,7 +33,7 @@ func mobileWebAddr(addr string) error {
 func mobileAPIAllowed(method, p string) bool {
 	if method == http.MethodGet {
 		switch p {
-		case "/api/mobile/capabilities", "/api/caller-keys", "/api/caller-keys/models", "/api/state", "/api/providers":
+		case "/api/mobile/capabilities", "/api/caller-keys", "/api/caller-keys/models", "/api/state", "/api/providers", "/api/usage/requests":
 			return true
 		}
 	}
