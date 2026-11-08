@@ -133,7 +133,7 @@ class ConfigBackupManagerTest {
         }
 
         // Tamper only sha256 value
-        val tamperedSha = normalText.replaceFirst(""sha256": "", ""sha256": "0000000000")
+        val tamperedSha = normalText.replaceFirst("\"sha256\": \"", "\"sha256\": \"0000000000")
         assertFailsWith<BackupChecksumMismatchException> {
             ConfigBackupManager.import(ByteArrayInputStream(tamperedSha.toByteArray(Charsets.UTF_8)))
         }
@@ -157,7 +157,7 @@ class ConfigBackupManagerTest {
         val out = ByteArrayOutputStream()
         ConfigBackupManager.export(out, sampleProviders, samplePreferences, fixedTime)
         val normalText = out.toString(Charsets.UTF_8)
-        val futureSchema = normalText.replaceFirst(""schemaVersion": 1", ""schemaVersion": 2")
+        val futureSchema = normalText.replaceFirst("\"schemaVersion\": 1", "\"schemaVersion\": 2")
         assertFailsWith<BackupValidationException> {
             ConfigBackupManager.import(ByteArrayInputStream(futureSchema.toByteArray(Charsets.UTF_8)))
         }
