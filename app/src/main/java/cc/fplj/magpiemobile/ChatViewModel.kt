@@ -45,6 +45,26 @@ data class ChatUiState(
 /** Activity ViewModel owns requests: rotation never launches another billable send. */
 internal class ChatConnection(val config: GatewayConfig, val isCurrent: () -> Boolean)
 
+/** Once begin commits, cancellation must close that identity even before core receives it. */
+internal fun cancellableTurnStore(base: ChatTurnStore, context: kotlin.coroutines.CoroutineContext): ChatTurnStore =
+    object : ChatTurnStore by base {
+        override fun begin(user: cc.fplj.magpiemobile.core.SessionRecord): String {
+            context.ensureActive()
+            val id = base.begin(user)
+            try {
+                context.ensureActive()
+            } catch (cancelled: CancellationException) {
+                try {
+                    base.fail(id, cc.fplj.magpiemobile.core.SessionRecord(System.currentTimeMillis(), "error", user.engine, "Chat failed; partial characters=0"))
+                } catch (_: Exception) {
+                    // Storage is unavailable: retain UNKNOWN/RUNNING for later process recovery, never replay.
+                }
+                throw cancelled
+            }
+            return id
+        }
+    }
+
 class ChatViewModel internal constructor(
     application: Application,
     private val openRepository: (Application) -> ChatRepository,
@@ -176,14 +196,7 @@ class ChatViewModel internal constructor(
                     val sendContext = coroutineContext
                     sendContext.ensureActive()
                     val baseTurns = repo.turnStore(selected.id)
-                    val guardedTurns = object : ChatTurnStore by baseTurns {
-                        override fun begin(user: cc.fplj.magpiemobile.core.SessionRecord): String {
-                            sendContext.ensureActive()
-                            val id = baseTurns.begin(user)
-                            sendContext.ensureActive()
-                            return id
-                        }
-                    }
+                    val guardedTurns = cancellableTurnStore(baseTurns, sendContext)
                     val session = StreamingChatSession(
                         StreamingChatClient(config), ChatClient(config), store = null, defaultModel = model,
                         turnStore = guardedTurns, initialMessages = context,

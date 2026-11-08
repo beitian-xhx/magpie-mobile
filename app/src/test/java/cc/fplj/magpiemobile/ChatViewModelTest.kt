@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import cc.fplj.magpiemobile.core.GatewayConfig
+import cc.fplj.magpiemobile.core.ChatTurnStore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import cc.fplj.magpiemobile.core.SessionRecord
 import cc.fplj.magpiemobile.data.ChatDatabase
 import cc.fplj.magpiemobile.data.ChatRepository
@@ -146,6 +149,21 @@ class ChatViewModelTest {
             assertEquals(1, probe.requests.get())
             assertTrue(runBlocking(Dispatchers.IO) { repo.context(vm.state.value.selected!!.id) }.isEmpty())
         }
+    }
+
+    @Test fun cancellationAfterCommittedBeginClosesTurnAndAllowsNextExplicitSend() = runBlocking(Dispatchers.IO) {
+        val id = repo.createConversation()
+        val real = repo.turnStore(id)
+        val job = Job()
+        val cancelAtCommit = object : ChatTurnStore by real {
+            override fun begin(user: SessionRecord): String = real.begin(user).also { job.cancel() }
+        }
+        val guarded = cancellableTurnStore(cancelAtCommit, job)
+        assertThrows(CancellationException::class.java) { guarded.begin(SessionRecord(1, "user", "chat:p/m", "cancel before HTTP")) }
+        assertEquals(listOf("FAILED", "FAILED"), repo.messages(id).map { it.state })
+        assertTrue(repo.context(id).isEmpty())
+        val next = real.begin(SessionRecord(2, "user", "chat:p/m", "new explicit turn"))
+        real.fail(next, SessionRecord(3, "error", "chat:p/m", "HTTP 429"))
     }
 
     /** Local synthetic SSE only: no vendor key, DNS, inference, or public network. */
