@@ -38,8 +38,8 @@ class GatewayKeysViewModel(
     private val mutable = MutableStateFlow(GatewayKeysUiState())
     val state = mutable.asStateFlow()
 
-    fun refresh() {
-        mutable.update { it.copy(loading = true, error = "", notice = "") }
+    fun refresh(clearNotice: Boolean = true) {
+        mutable.update { it.copy(loading = true, error = "", notice = if (clearNotice) "" else it.notice) }
         viewModelScope.launch {
             try {
                 val list = keysReader()
@@ -69,7 +69,7 @@ class GatewayKeysViewModel(
                         notice = "已成功创建客户端密钥：${created.name}"
                     )
                 }
-                refresh()
+                refresh(clearNotice = false)
                 onDone(created)
             } catch (e: CancellationException) {
                 throw e
