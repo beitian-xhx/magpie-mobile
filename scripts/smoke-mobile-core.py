@@ -44,7 +44,17 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
             body=json.dumps({'data':[{'id':'probe-model','name':'Probe model'}]}).encode()
             self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
         def do_POST(self):
-            vendor_calls['post']+=1;self.send_response(500);self.end_headers()
+            vendor_calls['post']+=1
+            length=int(self.headers.get('Content-Length') or 0)
+            raw=self.rfile.read(length)
+            try: parsed=json.loads(raw)
+            except ValueError: parsed={}
+            vendor_calls.setdefault('chat_paths',[]).append(self.path)
+            vendor_calls.setdefault('chat_models',[]).append(parsed.get('model'))
+            body=json.dumps({'id':'chatcmpl-test','object':'chat.completion','model':parsed.get('model'),
+                'choices':[{'index':0,'message':{'role':'assistant','content':'OK'},'finish_reason':'stop'}]}).encode()
+            self.send_response(200);self.send_header('Content-Type','application/json')
+            self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     vendor=ThreadingHTTPServer(('127.0.0.1',0),Vendor)
     threading.Thread(target=vendor.serve_forever,daemon=True).start()
     vendor_base='http://127.0.0.1:'+str(vendor.server_port)
@@ -131,6 +141,19 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         assert edited['name']=='Host edited' and edited['models']==['probe-model'] and edited['key']['set']
         assert request(admin,'/api/mobile/providers/edit','POST',
                        {'id':'host-provider','revision':original_revision,'name':'stale write'},cookie)[0]==409
+        # Reproduce the real chat path end to end with a fake upstream: the gateway must
+        # forward base+/chat/completions once and strip only the provider prefix.
+        code,body=request(gateway,'/v1/models',headers={'Authorization':'Bearer '+secret})
+        assert code==200,'gateway model catalog failed'
+        catalog=[m['id'] for m in json.loads(body)['data']]
+        target=next((i for i in catalog if 'probe-model' in i),'')
+        assert target,'provider model is missing from the gateway catalog'
+        code,body=request(gateway,'/v1/chat/completions','POST',
+                          {'model':target,'messages':[{'role':'user','content':'hi'}],'max_tokens':8,'stream':False},
+                          {'Authorization':'Bearer '+secret})
+        assert code==200,'gateway chat failed with HTTP '+str(code)
+        assert vendor_calls['chat_paths']==['/v1/chat/completions'],'unexpected upstream chat path'
+        assert vendor_calls['chat_models']==['probe-model'],'unexpected upstream model name'
         assert request(admin,'/api/provider/test','POST',{'id':'host-provider'},cookie)[0]==404
         assert request(admin,'/api/provider/detect','POST',{'id':'host-provider'},cookie)[0]==404
         code,body=request(admin,'/api/mobile/providers/edit','POST',
