@@ -162,7 +162,7 @@ fun ProvidersPanel(
         } finally { request?.clearSecret(); if (sequence == catalogSequence) discoveryLoading = false }
     }
     fun submit() {
-        if (busy || operationBusy || recoveryRequired || !listHealthy || !enabled) return
+        if (busy || operationBusy || recoveryRequired || !listHealthy || !enabled || owner == null) return
         val session = owner; val sequence = ++operationSequence
         val initial = snapshot; val inputKey = key; val inputName = name; val inputId = id
         val inputUrl = baseUrl; val inputModels = selected; val editedModels = policy.editedModels(); val allow = localHttp
