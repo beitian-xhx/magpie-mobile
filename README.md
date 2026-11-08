@@ -2,7 +2,7 @@
 
 完整范围见 [移植计划](plan.md)。用户确认0.1.1在当前手机启停正常；本项目仍不是主要GUI功能完整覆盖版。
 
-## 当前版本：0.1.6-android-network
+## 当前版本：0.1.7-chat-base
 
 修正Android目录网络失败：Android核心以NDK/CGO=1使用Bionic系统DNS，系统证书同时读取Conscrypt APEX与system路径，保留TLS校验。DNS、证书、网络、响应异常分开给出安全固定错误；不硬编码DNS或关闭证书校验。
 

@@ -18,6 +18,23 @@ class ProviderCreateDraftTest {
         ProviderEditSnapshot(id, revision, "Custom API", "https://api.example/v1/chat/completions", models, noModels,
             ProviderKeyMetadata(true, false, true))
 
+    @Test fun pastedFullChatEndpointIsStoredAsBaseSoCoreAppendsPathOnlyOnce() {
+        // Regression: saving ".../v1/chat/completions" made the gateway append the path
+        // again, so the upstream answered 404. Only the base may be persisted.
+        val body = create(url = "https://api.example/v1/chat/completions").requestBody()
+        assertEquals(JsonPrimitive("https://api.example/v1"), body["chat"])
+        val plain = create(url = "https://api.example").requestBody()
+        assertEquals(JsonPrimitive("https://api.example/v1"), plain["chat"])
+        val custom = create(url = "https://api.example/custom/v1").requestBody()
+        assertEquals(JsonPrimitive("https://api.example/custom/v1"), custom["chat"])
+    }
+
+    @Test fun editOfFullEndpointSnapshotKeepsSingleBaseAndSendsNoDoubledPath() {
+        val old = snapshot()
+        val body = ProviderEditDraft(old, chatUrl = "https://api.example/v1/chat/completions").requestBody()
+        assertFalse(body.containsKey("chat"))
+    }
+
     @Test fun creationIsExactlyCreateOnlySevenFieldsWithNewTrueAndRawModelIds() {
         val body = create().requestBody()
         assertEquals(setOf("new", "id", "name", "chat", "key", "models", "noModels"), body.keys)
@@ -81,8 +98,9 @@ class ProviderCreateDraftTest {
     @Test fun plainHttpRequiresExplicitOptInAndExactLiteralLoopbackWithPort() {
         val good = "http://127.0.0.1:4567/v1/chat/completions"
         assertFailsWith<IllegalArgumentException> { create(url = good) }
-        assertEquals(good, create(url = good, local = true).chatUrl)
-        assertEquals("http://[::1]:4567/v1/chat/completions", create(url = "http://[::1]:4567/v1/chat/completions", local = true).chatUrl)
+        // Stored chat is the base: the core appends /chat/completions itself.
+        assertEquals("http://127.0.0.1:4567/v1", create(url = good, local = true).chatUrl)
+        assertEquals("http://[::1]:4567/v1", create(url = "http://[::1]:4567/v1/chat/completions", local = true).chatUrl)
         for (url in listOf("http://127.0.0.1/chat", "http://localhost:4567/chat", "http://127.1:4567/chat",
             "http://2130706433:4567/chat", "http://127.0.0.1.evil:4567/chat", "http://192.168.1.1:4567/chat",
             "http://127.0.0.1:04567/chat", "http://[::1%25zone]:4567/chat", "http://evil@127.0.0.1:4567/chat")) {
@@ -97,8 +115,8 @@ class ProviderCreateDraftTest {
             "https://bad_host.example/chat", "https://api.example/%61pi/chat", "https://api.example/chat%3Fkey=secret")) {
             assertFailsWith<IllegalArgumentException> { create(url = url) }
         }
-        assertEquals("https://8.8.8.8/v1/chat/completions", create(url = "https://8.8.8.8/v1/chat/completions").chatUrl)
-        assertEquals("https://[2001:4860:4860::8888]/v1/chat/completions", create(url = "https://[2001:4860:4860::8888]/v1/chat/completions").chatUrl)
+        assertEquals("https://8.8.8.8/v1", create(url = "https://8.8.8.8/v1/chat/completions").chatUrl)
+        assertEquals("https://[2001:4860:4860::8888]/v1", create(url = "https://[2001:4860:4860::8888]/v1/chat/completions").chatUrl)
     }
 
     @Test fun modelLimitsCountRunesAndPreserveExplicitUnknownRawIds() {

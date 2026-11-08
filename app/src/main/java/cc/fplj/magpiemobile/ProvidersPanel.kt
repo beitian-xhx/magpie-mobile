@@ -207,7 +207,10 @@ fun ProvidersPanel(enabled: Boolean, operationBusy: Boolean = false, onBusyChang
                         scope.launch { try {
                             val edit = withContext(Dispatchers.IO) { NativeCoreSession.providerClient().editable(provider.id) }
                             if (current(session, sequence)) {
-                                snapshot = edit; id = edit.id; name = edit.name; baseUrl = edit.chatUrl; key = ""; nameTouched = true; idTouched = true
+                                // Show the base the core expects; a config saved with a full
+                                // endpoint is repaired on the next save (avoids doubled path/404).
+                                val shownBase = runCatching { ProviderBaseUrl.normalize(edit.chatUrl) }.getOrDefault(edit.chatUrl)
+                                snapshot = edit; id = edit.id; name = edit.name; baseUrl = shownBase; key = ""; nameTouched = true; idTouched = true
                                 localHttp = edit.chatUrl.startsWith("http://"); advanced = false; manual = false
                                 policy = ProviderEditorPolicy(false, edit.modelIds, edit.noModels); selected = edit.modelIds
                                 modelOptions = provider.models; manualText = selected.joinToString("\n"); message = ""; open = true
