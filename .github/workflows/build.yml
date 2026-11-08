@@ -57,7 +57,10 @@ jobs:
         run: bash scripts/fetch-assets.sh --bun-only
 
       - name: Run core and app JVM regression tests
-        run: gradle :core:test :app:testDebugUnitTest --no-daemon --stacktrace
+        run: |
+          set -euo pipefail
+          gradle :core:test :app:testDebugUnitTest --no-daemon --stacktrace
+          python3 scripts/check-room-schema.py
 
       - name: Upload JVM regression reports even on failure
         if: always()
