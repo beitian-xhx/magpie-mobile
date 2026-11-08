@@ -277,7 +277,7 @@ data class ProviderSummary internal constructor(
     val selectedModels: List<String> get() = chosen
     override fun toString(): String = "ProviderSummary(metadata=<safe>,credentials=<redacted>)"
 }
-data class ProviderListSnapshot internal constructor(val providers: List<ProviderSummary>, val hasFileError: Boolean) {
+data class ProviderListSnapshot(val providers: List<ProviderSummary> = emptyList(), val hasFileError: Boolean = false) {
     override fun toString(): String = "ProviderListSnapshot(count=" + providers.size + ",metadata=<safe>)"
 }
 class ProviderEditSnapshot internal constructor(

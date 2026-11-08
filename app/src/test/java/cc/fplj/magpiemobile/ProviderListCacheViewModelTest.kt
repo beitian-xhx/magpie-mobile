@@ -1,10 +1,6 @@
 package cc.fplj.magpiemobile
 
-import cc.fplj.magpiemobile.core.ManagerCredential
 import cc.fplj.magpiemobile.core.ProviderListSnapshot
-import cc.fplj.magpiemobile.core.ProviderManagementClient
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,57 +9,31 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import org.junit.After
-import org.junit.Assert.*
-import org.junit.Before
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
-import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProviderListCacheViewModelTest {
-    private lateinit var server: HttpServer
-    private lateinit var client: ProviderManagementClient
     private val fetchCount = AtomicInteger(0)
     private var returnFileError = false
-    private val managerKey = "0123456789abcdef"
-
-    @Before
-    fun setupServer() {
-        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        val port = server.address.port
-        val credential = ManagerCredential.fromKey(managerKey, port)
-        client = ProviderManagementClient(port, credential)
-
-        server.createContext("/api/providers") { exchange: HttpExchange ->
-            if (exchange.requestMethod == "GET") {
-                val hasError = returnFileError
-                val body = """{"providers":[{"id":"test-p","name":"Test","chat":"https://example.com/v1","models":["m1"],"noModels":false}],"hasFileError":$hasError}"""
-                val bytes = body.toByteArray(Charsets.UTF_8)
-                exchange.responseHeaders.set("Content-Type", "application/json")
-                exchange.sendResponseHeaders(200, bytes.size.toLong())
-                exchange.responseBody.use { it.write(bytes) }
-            } else {
-                exchange.sendResponseHeaders(404, -1)
-            }
-        }
-        server.start()
-    }
-
-    @After
-    fun tearDownServer() {
-        server.stop(0)
-    }
 
     private fun fetchSnapshot(): ProviderListSnapshot {
         fetchCount.incrementAndGet()
-        return client.getProviders()
+        return ProviderListSnapshot(emptyList(), returnFileError)
     }
 
     @Test
@@ -87,7 +57,7 @@ class ProviderListCacheViewModelTest {
         val blockFetch = CompletableDeferred<Unit>()
         val a = scope.async {
             vm.read(1L, force = false) {
-                scope.launch { blockFetch.await() }
+                blockFetch.await()
                 fetchSnapshot()
             }
         }
@@ -181,7 +151,7 @@ class ProviderListCacheViewModelTest {
         val callerJob = scope.launch {
             vm.read(1L, force = false) {
                 entered.complete(Unit)
-                kotlinx.coroutines.runBlocking { release.await() }
+                runBlocking { release.await() }
                 fetchSnapshot()
             }
         }
@@ -195,7 +165,7 @@ class ProviderListCacheViewModelTest {
         // Read again with same owner - it should join or get the completed cached snapshot
         var res: ProviderListSnapshot? = null
         for (i in 0 until 50) {
-            kotlinx.coroutines.delay(20)
+            delay(20)
             try {
                 res = vm.read(1L, force = false) { fetchSnapshot() }
                 if (res != null) break
