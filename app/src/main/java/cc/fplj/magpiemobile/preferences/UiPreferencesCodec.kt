@@ -24,7 +24,9 @@ data class UiPreferencesState(
 )
 
 /** Fixed exception only; no input, upstream diagnostic, file path or cause. */
-class UiPreferencesWriteException : IllegalStateException(UiPreferenceWarnings.WRITE)
+class UiPreferencesWriteException : IllegalStateException(UiPreferenceWarnings.WRITE), kotlinx.coroutines.CopyableThrowable<UiPreferencesWriteException> {
+    override fun createCopy(): UiPreferencesWriteException? = null
+}
 
 internal object UiPreferenceWarnings {
     const val READ = "无法读取界面设置，暂用安全默认值；原文件已保留。"

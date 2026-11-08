@@ -79,7 +79,8 @@ class ProviderListCacheViewModelTest {
 
     @Test
     fun forceRefreshBypassesCacheAndInvalidatesOnError() = runTest {
-        val vm = ProviderListCacheViewModel(readScope = this, readDispatcher = Dispatchers.Unconfined)
+        val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Unconfined)
+        val vm = ProviderListCacheViewModel(readScope = scope, readDispatcher = Dispatchers.Unconfined)
         val first = vm.read(1L, force = false) { fetchSnapshot() }
         assertEquals(1, fetchCount.get())
 
