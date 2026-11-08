@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cc.fplj.magpiemobile.core.EnginePaths
@@ -112,9 +114,12 @@ fun Dashboard(
                                 Text("管理凭据仅留在进程内；客户端密钥由核心签发并私有保存。连接成功不代表已配置渠道。", style = MaterialTheme.typography.bodySmall)
                             }
                         }
+                        GatewayEndpointCard(running = running && !stopping, defaultModel = shell.selectedModel)
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
-                        TextButton(onClick = { appShell.selectPage(AppPage.PROVIDERS) }) { Text("管理提供商") }
-                        TextButton(onClick = { appShell.selectPage(AppPage.CHAT) }) { Text("打开聊天与历史") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { appShell.selectPage(AppPage.PROVIDERS) }) { Text("管理提供商") }
+                            TextButton(onClick = { appShell.selectPage(AppPage.CHAT) }) { Text("打开聊天与历史") }
+                        }
                     }
                     AppPage.PROVIDERS -> {
                         if (!clientReady) {
@@ -198,11 +203,62 @@ fun Dashboard(
 }
 
 @Composable
+private fun GatewayEndpointCard(running: Boolean, defaultModel: String) {
+    val clipboard = LocalClipboardManager.current
+    var notice by remember { mutableStateOf("") }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("网关接入与本地端点", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (running) "网关正在运行，监听地址：http://127.0.0.1:3425/v1"
+                else "网关未运行；启动后将在 http://127.0.0.1:3425/v1 提供本地标准服务。",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                "协议：兼容 OpenAI API 标准规范（/v1/chat/completions 与 /v1/models）。手机本地其他 AI 客户端（如 Chatbox、NextChat、OpenCat 等）配置此 Base URL 即可直接通过本网关调用。",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (running) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        clipboard.setText(AnnotatedString("http://127.0.0.1:3425/v1"))
+                        notice = "已复制网关 Base URL 到剪贴板"
+                    }) {
+                        Text("复制 Base URL")
+                    }
+                    OutlinedButton(onClick = {
+                        val model = defaultModel.ifBlank { "default" }
+                        val curlCmd = "curl -X POST http://127.0.0.1:3425/v1/chat/completions " +
+                            "-H \"Content-Type: application/json\" " +
+                            "-H \"Authorization: Bearer <GATEWAY_KEY>\" " +
+                            "-d '{\"model\":\"" + model + "\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}'"
+                        clipboard.setText(AnnotatedString(curlCmd))
+                        notice = "已复制 cURL 测试命令到剪贴板"
+                    }) {
+                        Text("复制测试 cURL")
+                    }
+                }
+            }
+            if (notice.isNotEmpty()) {
+                Text(notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ModelCatalogCard(shell: AppShellState, ready: Boolean, idle: Boolean, refresh: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("模型目录", style = MaterialTheme.typography.titleMedium)
-            Text(if (ready) shell.modelsNotice else "请先完成核心安全连接。", style = MaterialTheme.typography.bodySmall)
+            Text("模型目录与速览", style = MaterialTheme.typography.titleMedium)
+            if (ready) {
+                val modelCountText = "可用模型：${shell.models.size} 个"
+                val selectedText = if (shell.selectedModel.isNotBlank()) "当前默认：${shell.selectedModel}" else "尚未选择默认模型"
+                Text("$modelCountText · $selectedText", style = MaterialTheme.typography.bodyMedium)
+                Text(shell.modelsNotice, style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(shell.modelsNotice, style = MaterialTheme.typography.bodySmall)
+            }
             Button(enabled = ready && idle && !shell.loadingModels, onClick = refresh) { Text(if (shell.loadingModels) "读取中…" else "刷新模型列表") }
         }
     }
