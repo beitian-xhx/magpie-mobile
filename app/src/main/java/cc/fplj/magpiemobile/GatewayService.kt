@@ -69,6 +69,10 @@ class GatewayService : Service() {
                 // Stop immediately; no preference await or persistence retry may delay shutdown.
                 GatewayRuntime.requestStop()
                 controller?.stop()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                try {
+                    getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
+                } catch (_: Exception) {}
                 stopSelf()
                 if (decision.recordStopIntent) {
                     try {
@@ -81,6 +85,10 @@ class GatewayService : Service() {
                 return START_NOT_STICKY
             }
             GatewayActionPolicy.Operation.STOP_SELF -> {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                try {
+                    getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
+                } catch (_: Exception) {}
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -171,6 +179,9 @@ class GatewayService : Service() {
         }, "MagpieStopCleanup").apply { isDaemon = true; start() }
         foregroundReady = false
         stopForeground(STOP_FOREGROUND_REMOVE)
+        try {
+            getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 

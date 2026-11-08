@@ -182,7 +182,14 @@ fun Dashboard(
                                 if (gateway.outputTail.isNotEmpty()) Text(gateway.outputTail, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        Text("文件桥、加密备份、订阅、路由、统计和资源库仍按批准计划推进；这些入口尚未交付，不以灰色按钮充当完成。", style = MaterialTheme.typography.bodySmall)
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("配置安全备份与恢复（SAF · M4）", style = MaterialTheme.typography.titleMedium)
+                                Text("支持经系统存储访问框架（SAF）导入导出脱敏配置。零密钥外泄、纯流式传输、SHA-256 完整性防篡改、拒绝任意文件路径及非安全协议。", style = MaterialTheme.typography.bodySmall)
+                                Text("格式版本：schemaVersion 1 · 安全上限：5MB", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        Text("订阅、高级路由、统计和资源库仍按批准计划推进；这些入口尚未交付，不以灰色按钮充当完成。", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
