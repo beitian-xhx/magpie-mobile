@@ -273,7 +273,7 @@ class ApplyMobileCoreTests(unittest.TestCase):
         for exception in ("ownCallback", "corsPreflight", "keyPageOpen", "imageTokenAsked", "oidcExchange", "proveAsked"):
             self.assertRegex(inserts, "!mobilepolicy.Enabled.*" + exception)
         tests = [(root / "overlay" / o["path"]).read_text() for o in manifest["overlays"] if o["path"].endswith("_test.go")]
-        self.assertEqual(len(tests), 7)
+        self.assertEqual(len(tests), 8)
         self.assertTrue(all(t.startswith("//go:build mobile\n") for t in tests))
         self.assertGreaterEqual(sum(t.count("func TestMobile") for t in tests), 10)
 

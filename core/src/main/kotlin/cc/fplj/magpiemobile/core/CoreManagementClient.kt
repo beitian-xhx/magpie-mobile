@@ -152,10 +152,18 @@ private data class AddCallerKey(val name: String)
 private data class CopyCallerKey(val key: String)
 
 open class ManagementException internal constructor(message: String) : RuntimeException(message)
-class ManagementHttpException(val httpCode: Int) : ManagementException("管理请求失败：HTTP $httpCode")
+class ManagementHttpException(val httpCode: Int, val safeErrorCode: String? = null) : ManagementException("管理请求失败：HTTP $httpCode")
 class ManagementExecutionUnknown : ManagementException("管理请求执行结果未知；不得重放写请求，请重新只读核对密钥列表")
 class ManagementProtocolException : ManagementException("管理响应格式无效或超过安全上限")
 class ManagementCapabilitiesMismatch : ManagementException("核心移动安全能力不兼容；拒绝注册密钥")
+
+internal fun safeModelErrorCode(value: String?): String? = value?.takeIf { it in setOf(
+    "provider_models_dns", "provider_models_tls_certificate", "provider_models_unavailable",
+    "provider_models_timeout", "provider_models_invalid", "provider_models_too_large",
+    "provider_models_sensitive_content", "provider_models_redirect_rejected", "provider_models_upstream_error",
+    "provider_models_key_required", "provider_models_forbidden", "provider_models_not_found",
+    "provider_models_rate_limited", "provider_models_origin_changed",
+) }
 
 internal fun validGatewayName(name: String): Boolean = name.isNotBlank() && name == name.trim() &&
     name.codePointCount(0, name.length) <= 120 && name.none { it.isISOControl() }
@@ -228,7 +236,7 @@ internal class BoundedCoreHttp(
             val code = conn.responseCode
             if (code < 100) throw ManagementExecutionUnknown()
             // Never read free-form errorBody, follow Location, or replay a POST.
-            if (code !in 200..299) throw ManagementHttpException(code)
+            if (code !in 200..299) throw ManagementHttpException(code, safeModelErrorCode(conn.getHeaderField("X-Magpie-Mobile-Error-Code")))
             if (conn.contentLengthLong > MAX_RESPONSE_BYTES) throw ManagementProtocolException()
             val bytes = conn.inputStream.use { input ->
                 val out = ByteArrayOutputStream()

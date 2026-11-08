@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -199,7 +200,17 @@ func mobileModelsNetworkError(ctx context.Context, err error) error {
 	if ctx.Err() != nil || errors.As(err, &timeout) && timeout.Timeout() {
 		return mobileModelsError(504, "provider_models_timeout", "model directory read timed out")
 	}
-	return mobileModelsError(502, "provider_models_unavailable", "model directory could not be read")
+	var dns *net.DNSError
+	if errors.As(err, &dns) { return mobileModelsError(502, "provider_models_dns", "system DNS could not resolve the model directory") }
+	var verification *tls.CertificateVerificationError
+	var authority x509.UnknownAuthorityError
+	var invalid x509.CertificateInvalidError
+	var hostname x509.HostnameError
+	var roots x509.SystemRootsError
+	if errors.As(err, &verification) || errors.As(err, &authority) || errors.As(err, &invalid) || errors.As(err, &hostname) || errors.As(err, &roots) {
+		return mobileModelsError(502, "provider_models_tls_certificate", "system TLS certificate verification failed")
+	}
+	return mobileModelsError(502, "provider_models_unavailable", "model directory connection failed")
 }
 
 func mobileModelsStatusError(status int) error {

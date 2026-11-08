@@ -284,4 +284,30 @@ class ProviderModelDiscoveryTest {
         assertFalse(ProviderEditDraft(old, name = "Name", chatUrl = old.chat).requestBody().containsKey("chat"))
         assertEquals(JsonPrimitive("https://api.example/v1/chat/completions"), ProviderEditDraft(old, chatUrl = "api.example/v1").requestBody()["chat"])
     }
+    @Test fun fixedDnsTlsAndResponseHeadersProduceSafeSpecificMessages() {
+        val cases = listOf(
+            "provider_models_dns" to ProviderModelDiscoveryFailure.DNS_FAILURE,
+            "provider_models_tls_certificate" to ProviderModelDiscoveryFailure.TLS_CERTIFICATE,
+            "provider_models_invalid" to ProviderModelDiscoveryFailure.INVALID_RESPONSE,
+            "provider_models_redirect_rejected" to ProviderModelDiscoveryFailure.REDIRECT_REJECTED,
+        )
+        for ((code, failure) in cases) {
+            api.modelsHook = { exchange, _ ->
+                exchange.responseHeaders.add("X-Magpie-Mobile-Error-Code", code)
+                api.respond(exchange, 502, "private body " + ProviderApiFixture.API_KEY)
+            }
+            val error = assertFailsWith<ProviderModelDiscoveryException> { api.client().discoverModels(request()) }
+            assertEquals(failure, error.failure)
+            assertFalse(error.message!!.contains(ProviderApiFixture.API_KEY))
+        }
+    }
+    @Test fun arbitraryErrorHeaderCannotLeakOrChangeClassification() {
+        api.modelsHook = { exchange, _ ->
+            exchange.responseHeaders.add("X-Magpie-Mobile-Error-Code", ProviderApiFixture.API_KEY)
+            api.respond(exchange, 502, ProviderApiFixture.API_KEY)
+        }
+        val error = assertFailsWith<ProviderModelDiscoveryException> { api.client().discoverModels(request()) }
+        assertEquals(ProviderModelDiscoveryFailure.NETWORK_OR_RESPONSE, error.failure)
+        assertFalse(error.stackTraceToString().contains(ProviderApiFixture.API_KEY))
+    }
 }

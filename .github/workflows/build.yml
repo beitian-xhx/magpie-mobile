@@ -44,6 +44,7 @@ jobs:
         run: |
           python3 scripts/check-startup-contract.py
           python3 scripts/check-model-discovery-trigger.py
+          python3 scripts/check-android-network-build.py
 
       - name: Apply exact hash-pinned mobile core patch
         run: |
@@ -84,18 +85,23 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           set -euo pipefail
-          go build -trimpath -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.3' -o ../magpie-mobile-host .
+          go build -trimpath -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.4' -o ../magpie-mobile-host .
           python3 ../../scripts/smoke-mobile-core.py --exe ../magpie-mobile-host
 
       - name: Build the Android ARM64 mobile core
         working-directory: build-tmp/upstream
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: '1'
           GOOS: android
           GOARCH: arm64
         run: |
           set -euo pipefail
-          go build -trimpath -buildmode=pie -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.3' -o ../magpie-mobile-android-arm64 .
+          # Android DNS uses Bionic/netd; CGO0 cannot use that resolver.
+          ndk="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          test -n "$ndk"
+          export CC="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang"
+          test -x "$CC"
+          go build -trimpath -buildmode=pie -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.4 -linkmode=external -extldflags=-Wl,-z,max-page-size=16384' -o ../magpie-mobile-android-arm64 .
           cp ../magpie-mobile-android-arm64 ../../app/src/main/jniLibs/arm64-v8a/libmagpie_exec.so
           sha256sum ../magpie-mobile-android-arm64 > ../mobile-core.sha256
           go version -m ../magpie-mobile-android-arm64 > ../mobile-core-build-info.txt
@@ -142,12 +148,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v0.1.5-discovery-trigger-${GITHUB_SHA:0:8}"
-          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.5-discovery-trigger.apk
-          sha256sum magpie-mobile-0.1.5-discovery-trigger.apk | tee magpie-mobile-0.1.5-discovery-trigger.apk.sha256
-          printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.3 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
+          tag="v0.1.6-android-network-${GITHUB_SHA:0:8}"
+          cp app/build/outputs/apk/debug/app-debug.apk magpie-mobile-0.1.6-android-network.apk
+          sha256sum magpie-mobile-0.1.6-android-network.apk | tee magpie-mobile-0.1.6-android-network.apk.sha256
+          printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.4 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
           cat build-tmp/mobile-core.sha256 >> build-info.txt
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "0.1.5 自动目录触发修复 (${GITHUB_SHA:0:8})" --notes "Base URL与凭据输入后自动只读模型目录，独立编辑页/模型勾选/自动标识、选择和失败草稿保留、停止清理状态；仅读供应商GET metadata、不test/detect、不自动推理。JVM/Go/host回归及APK由CI验证，手机与真实渠道另行验收。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create "$tag" --title "0.1.6 Android DNS 与证书修复 (${GITHUB_SHA:0:8})" --notes "Base URL与凭据输入后自动只读模型目录，独立编辑页/模型勾选/自动标识、选择和失败草稿保留、停止清理状态；仅读供应商GET metadata、不test/detect、不自动推理。JVM/Go/host回归及APK由CI验证，手机与真实渠道另行验收。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
           fi
-          gh release upload "$tag" magpie-mobile-0.1.5-discovery-trigger.apk magpie-mobile-0.1.5-discovery-trigger.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber
+          gh release upload "$tag" magpie-mobile-0.1.6-android-network.apk magpie-mobile-0.1.6-android-network.apk.sha256 build-info.txt build-tmp/mobile-core-build-info.txt --clobber

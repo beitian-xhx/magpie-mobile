@@ -129,12 +129,18 @@ class ProviderModelCatalog internal constructor(val models: List<ProviderModelSu
 enum class ProviderModelDiscoveryFailure {
     KEY_OR_PERMISSION, RATE_LIMITED, NO_CATALOG, STALE_SNAPSHOT, UNSUPPORTED,
     NETWORK_OR_RESPONSE, TIMEOUT, INVALID_RESPONSE, INVALID_REQUEST,
+    DNS_FAILURE, TLS_CERTIFICATE, RESPONSE_TOO_LARGE, REDIRECT_REJECTED, SENSITIVE_CONTENT,
 }
 /** Fixed user messages only. No vendor error body, URL, Key, or original exception cause. */
 class ProviderModelDiscoveryException internal constructor(
     val failure: ProviderModelDiscoveryFailure,
     val httpCode: Int? = null,
 ) : ManagementException(when (failure) {
+    ProviderModelDiscoveryFailure.DNS_FAILURE -> "Android系统DNS未能解析模型服务（HTTP502）；请更新网络修复版并检查网络"
+    ProviderModelDiscoveryFailure.TLS_CERTIFICATE -> "系统TLS证书校验失败（HTTP502）；请检查时间/系统证书，不会跳过安全校验"
+    ProviderModelDiscoveryFailure.RESPONSE_TOO_LARGE -> "模型目录响应超过安全大小上限；未修改配置"
+    ProviderModelDiscoveryFailure.REDIRECT_REJECTED -> "模型目录重定向已拒绝，避免密钥被转发；请填写最终可信Base URL"
+    ProviderModelDiscoveryFailure.SENSITIVE_CONTENT -> "模型目录含敏感凭据回显，已拒绝展示；未修改配置"
     ProviderModelDiscoveryFailure.KEY_OR_PERMISSION -> "模型目录需要有效Key或访问权限（HTTP " + httpCode + "）；请检查密钥"
     ProviderModelDiscoveryFailure.RATE_LIMITED -> "模型目录暂时限流（HTTP429）；请稍候重新读取"
     ProviderModelDiscoveryFailure.NO_CATALOG -> "该地址未提供兼容模型目录（HTTP " + httpCode + "）；请检查Base URL或手填模型ID"

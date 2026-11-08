@@ -67,6 +67,8 @@ class GatewayService : Service() {
                 val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
                 val engineEnvironment = EngineEnvironment.prepare(layout) + mapOf(
                     "MAGPIE_WEB_KEY" to adminKey,
+                    // Android 14+ system roots live in Conscrypt APEX. No TLS verification bypass.
+                    "SSL_CERT_DIR" to "/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts",
                     "MAGPIE_ADDR" to "127.0.0.1:3425",
                 )
                 for (exe in listOf(EnginePaths.magpieExecutable(layout), EnginePaths.bunExecutable(layout))) {

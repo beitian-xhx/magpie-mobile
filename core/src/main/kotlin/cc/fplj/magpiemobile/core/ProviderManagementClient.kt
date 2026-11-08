@@ -93,7 +93,16 @@ class ProviderManagementClient(
     } catch (error: ProviderModelDiscoveryException) {
         throw error
     } catch (error: ManagementHttpException) {
-        val kind = when (error.httpCode) {
+        val specific = when (error.safeErrorCode) {
+            "provider_models_dns" -> ProviderModelDiscoveryFailure.DNS_FAILURE
+            "provider_models_tls_certificate" -> ProviderModelDiscoveryFailure.TLS_CERTIFICATE
+            "provider_models_invalid" -> ProviderModelDiscoveryFailure.INVALID_RESPONSE
+            "provider_models_too_large" -> ProviderModelDiscoveryFailure.RESPONSE_TOO_LARGE
+            "provider_models_sensitive_content" -> ProviderModelDiscoveryFailure.SENSITIVE_CONTENT
+            "provider_models_redirect_rejected" -> ProviderModelDiscoveryFailure.REDIRECT_REJECTED
+            else -> null
+        }
+        val kind = specific ?: when (error.httpCode) {
             401, 403 -> ProviderModelDiscoveryFailure.KEY_OR_PERMISSION
             404, 405 -> ProviderModelDiscoveryFailure.NO_CATALOG
             409 -> ProviderModelDiscoveryFailure.STALE_SNAPSHOT

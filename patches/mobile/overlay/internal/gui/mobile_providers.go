@@ -96,6 +96,7 @@ func mobileProviderFailure(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &discovery):
 		status, code, message = discovery.Status, discovery.Code, discovery.Message
+		w.Header().Set("X-Magpie-Mobile-Error-Code", discovery.Code)
 	case errors.Is(err, provider.ErrMobileProviderRevision):
 		status, code, message = http.StatusConflict, "provider_revision_conflict", "provider changed; reload editable snapshot"
 	case errors.Is(err, provider.ErrMobileProviderExists):

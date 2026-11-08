@@ -2,7 +2,9 @@
 
 完整范围见 [移植计划](plan.md)。用户确认0.1.1在当前手机启停正常；本项目仍不是主要GUI功能完整覆盖版。
 
-## 当前版本：0.1.5-discovery-trigger
+## 当前版本：0.1.6-android-network
+
+修正Android目录网络失败：Android核心以NDK/CGO=1使用Bionic系统DNS，系统证书同时读取Conscrypt APEX与system路径，保留TLS校验。DNS、证书、网络、响应异常分开给出安全固定错误；不硬编码DNS或关闭证书校验。
 
 修正0.1.3的默认手填模型流程：**Base URL/所需API Key → 自动只读目录 → 搜索/勾选模型 → 保存**。
 
@@ -24,7 +26,7 @@
 
 ## 验证与操作
 
-Actions执行Python应用器、JVM、Go安全/目录、真实host fake-vendor GET-only烟测，再构建固定54dc257f/Go1.26.8 mobile,nogui AndroidARM64 PIE核心0.1.3188-mobile.3和APK，核对载荷SHA256。新增代码/静态检查不算实际测试通过，以最终提交CI报告为准。host模拟目录不等于真实渠道推理通过。
+Actions执行Python应用器、JVM、Go安全/目录、真实host fake-vendor GET-only烟测，再构建固定54dc257f/Go1.26.8 mobile,nogui AndroidARM64 PIE核心0.1.3188-mobile.4（Android CGO1、外部PIE链接；host测试仍CGO0）和APK，核对载荷SHA256。新增代码/静态检查不算实际测试通过，以最终提交CI报告为准。host模拟目录不等于真实渠道推理通过。
 
 安装新独立Release后核对版本/SHA，启动并完成安全连接；新增提供商填URL和必要Key，目录自动出现后选择模型保存。目录401/429/404/超时分别提示，获取失败可重试只读或高级补ID，不用聊天探测。保存后目录自动刷新，不需要人为反复刷新。签名冲突先回报并保留旧应用数据。
 
