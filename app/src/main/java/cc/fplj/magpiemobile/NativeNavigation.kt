@@ -271,10 +271,7 @@ private fun GatewayEndpointCard(
                         onClick = {
                             val model = defaultModel.ifBlank { "default" }
                             val effectiveKey = currentGatewayKey ?: "sk-magpie-key"
-                            val curlCmd = "curl -X POST http://127.0.0.1:3425/v1/chat/completions " +
-                                "-H "Content-Type: application/json" " +
-                                "-H "Authorization: Bearer " + effectiveKey + "" " +
-                                "-d '{"model":"" + model + "","messages":[{"role":"user","content":"Hello"}]}'"
+                            val curlCmd = """curl -X POST http://127.0.0.1:3425/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer $effectiveKey" -d '{"model":"$model","messages":[{"role":"user","content":"Hello"}]}'"""
                             clipboard.setText(AnnotatedString(curlCmd))
                             notice = "已复制测试 cURL（内嵌有效网关 Key），终端粘贴回车即可测试"
                         }
