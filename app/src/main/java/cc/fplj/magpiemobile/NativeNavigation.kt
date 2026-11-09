@@ -47,6 +47,8 @@ fun Dashboard(
     val usageState by usageViewModel.state.collectAsStateWithLifecycle()
     val routingViewModel: RoutingViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val routingState by routingViewModel.state.collectAsStateWithLifecycle()
+    val keyPoolViewModel: KeyPoolViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val keyPoolState by keyPoolViewModel.state.collectAsStateWithLifecycle()
     var providerBusy by remember { mutableStateOf(false) }
     var diagnosing by remember { mutableStateOf(false) }
     var diagnostic by remember { mutableStateOf("") } // Never DataStore/Bundle.
@@ -150,6 +152,11 @@ fun Dashboard(
                             clientReady = clientReady,
                             viewModel = routingViewModel,
                             routingState = routingState
+                        )
+                        KeyPoolingCard(
+                            clientReady = clientReady,
+                            viewModel = keyPoolViewModel,
+                            poolState = keyPoolState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -604,6 +611,102 @@ private fun ModelRoutingCard(
             }
             if (routingState.notice.isNotEmpty()) {
                 Text(routingState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyPoolingCard(
+    clientReady: Boolean,
+    viewModel: KeyPoolViewModel,
+    poolState: KeyPoolUiState,
+) {
+    var newKeyId by remember { mutableStateOf("") }
+    var newSecret by remember { mutableStateOf("") }
+    var providerInput by remember { mutableStateOf("openai") }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("多 Key 轮询与账号池 (Key Pooling)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "为提供商配置多枚 API Key 并在本地实现循环轮询负载均衡，支持故障隔离与停用切换。",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            if (poolState.keys.isEmpty()) {
+                Text("当前账号池为空；默认使用提供商全局主密钥。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                poolState.keys.forEach { keyEntry ->
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    keyEntry.id + " (" + keyEntry.maskedSecret + ")",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (keyEntry.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { viewModel.toggleKey(keyEntry.id) }) {
+                                    Text(if (keyEntry.enabled) "已启用" else "已停用")
+                                }
+                                TextButton(onClick = { viewModel.removeKey(keyEntry.id) }) {
+                                    Text("移除")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedTextField(
+                    value = providerInput,
+                    onValueChange = { providerInput = it },
+                    label = { Text("提供商标识 (例如: openai)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = newKeyId,
+                    onValueChange = { newKeyId = it },
+                    label = { Text("密钥标识 (例如: account-2)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = newSecret,
+                    onValueChange = { newSecret = it },
+                    label = { Text("API Key 内容 (sk-...)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    enabled = providerInput.isNotBlank() && newKeyId.isNotBlank() && newSecret.isNotBlank(),
+                    onClick = {
+                        viewModel.addKey(providerInput, newKeyId, newSecret)
+                        newKeyId = ""
+                        newSecret = ""
+                    }
+                ) {
+                    Text("添加至密钥池")
+                }
+            }
+
+            if (poolState.error.isNotEmpty()) {
+                Text(poolState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (poolState.notice.isNotEmpty()) {
+                Text(poolState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
