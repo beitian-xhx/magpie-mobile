@@ -71,12 +71,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cc.fplj.magpiemobile.core.StartupBenchmark.recordProcessInit()
         val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
         try {
             healthServer = HealthServer(infoProvider = {
                 val status = GatewayRuntime.status.value
-                mapOf("app" to "magpie-mobile", "version" to BuildConfig.VERSION_NAME,
-                    "state" to status.phase.name, "message" to status.message)
+                val metrics = cc.fplj.magpiemobile.core.StartupBenchmark.getMetrics()
+                mapOf(
+                    "app" to "magpie-mobile",
+                    "version" to BuildConfig.VERSION_NAME,
+                    "state" to status.phase.name,
+                    "message" to status.message,
+                    "startupLatencyMs" to metrics.totalToReadyMs.toString(),
+                    "readyWithinBudget" to metrics.isReadyWithinBudget.toString(),
+                )
             }).also { it.start() }
         } catch (e: Exception) {
             android.util.Log.w("MagpieGateway", "观测端口不可用：" + e.javaClass.simpleName)

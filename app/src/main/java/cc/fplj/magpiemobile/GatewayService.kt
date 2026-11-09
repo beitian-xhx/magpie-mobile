@@ -130,9 +130,17 @@ class GatewayService : Service() {
         if (!GatewayRuntime.isCurrent(owner)) return
         val safe = GatewayRuntime.status.value
         if (status.phase == GatewayEngineController.Phase.RUNNING) {
+            cc.fplj.magpiemobile.core.StartupBenchmark.recordGatewayReady()
             NativeCoreSession.connect(owner, filesDir)
         } else {
             NativeCoreSession.suspend(owner)
+            if (status.phase == GatewayEngineController.Phase.FAILED || status.phase == GatewayEngineController.Phase.BACKOFF) {
+                try {
+                    cc.fplj.magpiemobile.core.PostMortemAuditor(java.io.File(filesDir, "config"))
+                        .recordAbnormalExit(status.phase.name, -1, safe.message + "
+" + safe.outputTail)
+                } catch (_: Exception) {}
+            }
         }
         Log.i("MagpieGateway", safe.phase.name + ": " + safe.message)
         if (foregroundReady) {

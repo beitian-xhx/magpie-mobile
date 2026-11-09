@@ -1,16 +1,13 @@
-## Magpie-Mobile 0.1.20-stability-lifecycle (P4-1)
+## Magpie-Mobile 0.1.21-telemetry-recovery (P4-2)
 
 ### 核心功能与特性更新
-- **网络连接状态与热切换感知 (Network Hot-Switching)**:
-  - 引入 `NetworkConnectivityMonitor`，实时监听移动蜂窝 (Cellular)、Wi-Fi 与以太网切换；
-  - 自动上报互联网有效性 (`NET_CAPABILITY_VALIDATED`)，为流式请求与重放保护提供网络状态底座。
-- **Android 系统级电源管理与 Doze 白名单治理 (Power Governance)**:
-  - 实现 `BatteryOptimizationHelper`，检测系统电池优化豁免状态 (`isIgnoringBatteryOptimizations`)；
-  - 提供安全的系统设置引导 Intent，防止后台服务被系统省电策略与低内存杀手（LMK）异常冻结或终止。
-- **低内存告警与系统事件联动 (Memory & LifeCycle)**:
-  - 实现 `StabilityViewModel`，注册 `ComponentCallbacks2` 实时感知 `TRIM_MEMORY_RUNNING_CRITICAL` 与 `onLowMemory`；
-  - 内存承压时在网关主界面抛出告警提示，引导用户控制多模型并发。
-- **原生 UI 状态卡片**:
-  - 首屏挂载 `SystemStabilityCard`，直观呈现当前网络拓扑、电源优化状态并支持一键刷新与设置跳转。
-- **Release 自动化集成**:
-  - CI 流水线全面支持自动从 `RELEASE_NOTES.md` 读取并同步版本更新日志至 GitHub Release 页面。
+- **冷启动耗时与就绪性能基准 (Cold-Start Benchmark)**:
+  - 建立 StartupBenchmark 遥测体系，测量从进程加载 (ProcessInit) 到网关双端口监听就绪 (GatewayReady) 的完整毫秒耗时；
+  - 自动对标 plan.md §6 中 800ms 的就绪黄金门槛，标记达标状态。
+- **进程异常退出与崩溃事后审计 (Post-Mortem Auditor)**:
+  - 实现 PostMortemAuditor，在应用私有沙箱中记录进程非预期退出时的状态 (Phase)、退出码及脱敏堆栈摘要；
+  - 彻底杜绝密码与密钥泄露，冷启动后自动展示异常诊断并提供一键清理。
+- **本地健康与遥测接口增强 (Healthz Endpoint)**:
+  - 升级 HealthServer (/healthz)，暴露 startupLatencyMs 与 readyWithinBudget 遥测字段，方便本地观测与自动化测试。
+- **UI 诊断卡片深度集成**:
+  - 在设置与诊断面板中动态呈现冷启动性能指标与历史异常退出日志。

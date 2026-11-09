@@ -232,6 +232,29 @@ fun Dashboard(
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("版本与诊断", style = MaterialTheme.typography.titleMedium)
                                 Text("版本 " + BuildConfig.VERSION_NAME + " · " + BuildConfig.GIT_SHA, style = MaterialTheme.typography.bodySmall)
+                                val startupMetrics = cc.fplj.magpiemobile.core.StartupBenchmark.getMetrics()
+                                if (startupMetrics.totalToReadyMs >= 0) {
+                                    Text(
+                                        "冷启动就绪耗时: " + startupMetrics.totalToReadyMs + "ms (" + (if (startupMetrics.isReadyWithinBudget) "达标 <800ms" else "超出预算") + ")",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (startupMetrics.isReadyWithinBudget) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                val auditor = remember(layout) { cc.fplj.magpiemobile.core.PostMortemAuditor(layout.configDir) }
+                                var postMortem by remember(layout) { mutableStateOf(auditor.readReport()) }
+                                if (postMortem != null) {
+                                    Text(
+                                        "异常退出审计记录: [" + postMortem!!.lastKnownPhase + "] 退出码=" + postMortem!!.exitCode,
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    if (postMortem!!.sanitizedDetail.isNotEmpty()) {
+                                        Text(postMortem!!.sanitizedDetail.take(300), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    TextButton(onClick = { auditor.clear(); postMortem = null }) {
+                                        Text("清除审计记录")
+                                    }
+                                }
                                 Button(enabled = !diagnosing, onClick = {
                                     diagnosing = true
                                     scope.launch {
