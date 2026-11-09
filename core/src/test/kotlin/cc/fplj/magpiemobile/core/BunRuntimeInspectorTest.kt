@@ -57,7 +57,7 @@ class BunRuntimeInspectorTest {
     @Test
     fun detectArchitectureRejectsNonElfOrCorruptedHeader() {
         val mockBun = File(tempDir, "non_elf.bin")
-        mockBun.writeText("NOT AN ELF BINARY")
+        mockBun.writeText("NOT AN ELF BINARY AT ALL! 1234567890")
         assertEquals("not-elf", BunRuntimeInspector.detectElfArchitecture(mockBun))
 
         val shortFile = File(tempDir, "short.bin")

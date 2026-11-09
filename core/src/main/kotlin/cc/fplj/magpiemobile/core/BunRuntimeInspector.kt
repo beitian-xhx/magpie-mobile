@@ -63,13 +63,15 @@ object BunRuntimeInspector {
         FileInputStream(file).use { input ->
             val header = ByteArray(20)
             val read = input.read(header)
-            if (read < 20) return "truncated"
+            if (read < 4) return "truncated"
 
             // Check \x7fELF
             if (header[0] != 0x7F.toByte() || header[1] != 'E'.code.toByte() ||
                 header[2] != 'L'.code.toByte() || header[3] != 'F'.code.toByte()) {
                 return "not-elf"
             }
+
+            if (read < 20) return "truncated"
 
             val elfClass = header[4].toInt() and 0xFF
             val elfData = header[5].toInt() and 0xFF
