@@ -178,7 +178,15 @@ jobs:
           sha256sum "$apk_name" | tee "${apk_name}.sha256"
           printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.4 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
           cat build-tmp/mobile-core.sha256 build-tmp/apk-signature.txt >> build-info.txt
+          notes_file="build-tmp/release-notes.md"
+          if [ -f "RELEASE_NOTES.md" ]; then
+            cp "RELEASE_NOTES.md" "$notes_file"
+          else
+            printf 'Magpie-Mobile 自动化发布 %s\n提交：%s\n' "$version_name" "$GITHUB_SHA" > "$notes_file"
+          fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Magpie-Mobile ${version_name} (${GITHUB_SHA:0:8})" --notes "Magpie-Mobile 自动化发布 ${version_name}。包含停止网关通知即时清理、M4 SAF配置安全备份与恢复（ConfigBackupManager）。提交：$GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create "$tag" --title "Magpie-Mobile ${version_name} (${GITHUB_SHA:0:8})" --notes-file "$notes_file" --target "$GITHUB_SHA"
+          else
+            gh release edit "$tag" --title "Magpie-Mobile ${version_name} (${GITHUB_SHA:0:8})" --notes-file "$notes_file"
           fi
           gh release upload "$tag" "$apk_name" "${apk_name}.sha256" build-info.txt build-tmp/mobile-core-build-info.txt --clobber

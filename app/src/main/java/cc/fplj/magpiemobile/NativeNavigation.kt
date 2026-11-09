@@ -57,6 +57,8 @@ fun Dashboard(
     val mcpState by mcpViewModel.state.collectAsStateWithLifecycle()
     val marketViewModel: PluginMarketViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val marketState by marketViewModel.state.collectAsStateWithLifecycle()
+    val stabilityViewModel: StabilityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val stabilityState by stabilityViewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(layout) {
         pluginViewModel.initialize(layout)
@@ -182,6 +184,10 @@ fun Dashboard(
                         PluginMarketCard(
                             viewModel = marketViewModel,
                             marketState = marketState
+                        )
+                        SystemStabilityCard(
+                            viewModel = stabilityViewModel,
+                            stabilityState = stabilityState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -733,6 +739,48 @@ private fun KeyPoolingCard(
             }
             if (poolState.notice.isNotEmpty()) {
                 Text(poolState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SystemStabilityCard(
+    viewModel: StabilityViewModel,
+    stabilityState: SystemStabilityUiState,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("设备稳定性与系统保活 (System Stability & LifeCycle)", style = MaterialTheme.typography.titleMedium)
+            Text("网络状态: " + stabilityState.networkState.description, style = MaterialTheme.typography.bodyMedium)
+            Text("电源策略: " + stabilityState.batteryStatus.description, style = MaterialTheme.typography.bodySmall)
+
+            if (stabilityState.batteryStatus.canRequest) {
+                Button(onClick = {
+                    try {
+                        BatteryOptimizationHelper.createOptimizationSettingsIntent(context)?.let {
+                            context.startActivity(it)
+                        }
+                    } catch (_: Exception) {}
+                }) {
+                    Text("前往系统设置忽略电池优化")
+                }
+            }
+
+            if (stabilityState.memoryTrimNotice.isNotEmpty()) {
+                Text(
+                    stabilityState.memoryTrimNotice,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                TextButton(onClick = { viewModel.clearMemoryNotice() }) {
+                    Text("清除内存告警")
+                }
+            }
+
+            TextButton(onClick = { viewModel.refresh() }) {
+                Text("刷新网络与保活状态")
             }
         }
     }
