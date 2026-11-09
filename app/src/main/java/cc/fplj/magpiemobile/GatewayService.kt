@@ -136,9 +136,9 @@ class GatewayService : Service() {
             NativeCoreSession.suspend(owner)
             if (status.phase == GatewayEngineController.Phase.FAILED || status.phase == GatewayEngineController.Phase.BACKOFF) {
                 try {
+                    val detail = safe.message + "\n" + safe.outputTail
                     cc.fplj.magpiemobile.core.PostMortemAuditor(java.io.File(filesDir, "config"))
-                        .recordAbnormalExit(status.phase.name, -1, safe.message + "
-" + safe.outputTail)
+                        .recordAbnormalExit(status.phase.name, -1, detail)
                 } catch (_: Exception) {}
             }
         }
