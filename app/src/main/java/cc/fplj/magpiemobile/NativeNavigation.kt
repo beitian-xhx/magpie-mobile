@@ -55,9 +55,12 @@ fun Dashboard(
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     val mcpViewModel: McpViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val mcpState by mcpViewModel.state.collectAsStateWithLifecycle()
+    val marketViewModel: PluginMarketViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val marketState by marketViewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(layout) {
         pluginViewModel.initialize(layout)
+        marketViewModel.initialize(layout)
     }
     var providerBusy by remember { mutableStateOf(false) }
     var diagnosing by remember { mutableStateOf(false) }
@@ -175,6 +178,10 @@ fun Dashboard(
                         McpServerCard(
                             viewModel = mcpViewModel,
                             mcpState = mcpState
+                        )
+                        PluginMarketCard(
+                            viewModel = marketViewModel,
+                            marketState = marketState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -726,6 +733,50 @@ private fun KeyPoolingCard(
             }
             if (poolState.notice.isNotEmpty()) {
                 Text(poolState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginMarketCard(
+    viewModel: PluginMarketViewModel,
+    marketState: PluginMarketUiState,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("受控插件市场与生态 (Verified Plugin Market)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "收录 " + marketState.entries.size + " 个已审计移动安全插件（沙箱隔离与 SHA-256 完整性认证）",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            marketState.entries.forEach { entry ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(entry.name + " v" + entry.version, style = MaterialTheme.typography.bodyMedium)
+                        Text(entry.description, style = MaterialTheme.typography.bodySmall)
+                        Text("作者: " + entry.author + " · " + entry.capabilities.joinToString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                    val isInstalled = marketState.installedIds.contains(entry.id)
+                    Button(
+                        onClick = { viewModel.installFromMarket(entry) },
+                        enabled = !isInstalled
+                    ) {
+                        Text(if (isInstalled) "已安装" else "一键安装")
+                    }
+                }
+            }
+
+            if (marketState.error.isNotEmpty()) {
+                Text(marketState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (marketState.notice.isNotEmpty()) {
+                Text(marketState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
