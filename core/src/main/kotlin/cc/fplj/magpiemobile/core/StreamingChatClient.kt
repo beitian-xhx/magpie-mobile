@@ -17,14 +17,21 @@ class StreamingChatClient(private val config: GatewayConfig) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** 流式一轮：onDelta 每增量回调一次；成功时返回完整拼接文本。 */
+    /** 流式一轮：onDelta 每增量回调一次；成功时返回完整拼接文本。保持原始签名以兼容尾随 lambda。 */
     fun stream(
         model: String,
         messages: List<ChatClient.Message>,
         onDelta: (String) -> Unit = {},
+    ): String = streamWithOptions(model, messages, null, null, null, onDelta)
+
+    /** 流式一轮（带采样与长度控制参数）。 */
+    fun streamWithOptions(
+        model: String,
+        messages: List<ChatClient.Message>,
         maxTokens: Int? = null,
         temperature: Double? = null,
         topP: Double? = null,
+        onDelta: (String) -> Unit = {},
     ): String {
         val body = buildJsonObject {
             put("model", model)
