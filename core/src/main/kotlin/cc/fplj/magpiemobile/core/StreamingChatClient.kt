@@ -21,6 +21,9 @@ class StreamingChatClient(private val config: GatewayConfig) {
     fun stream(
         model: String,
         messages: List<ChatClient.Message>,
+        maxTokens: Int? = null,
+        temperature: Double? = null,
+        topP: Double? = null,
         onDelta: (String) -> Unit = {},
     ): String {
         val body = buildJsonObject {
@@ -28,6 +31,9 @@ class StreamingChatClient(private val config: GatewayConfig) {
             put("messages", json.encodeToJsonElement(
                 kotlinx.serialization.builtins.ListSerializer(ChatClient.Message.serializer()), messages))
             put("stream", true)
+            if (maxTokens != null) put("max_tokens", maxTokens)
+            if (temperature != null) put("temperature", temperature)
+            if (topP != null) put("top_p", topP)
         }.toString()
         val parser = SseChatParser(onDelta)
         var conn: HttpURLConnection? = null

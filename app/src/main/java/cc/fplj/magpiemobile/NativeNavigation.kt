@@ -51,6 +51,8 @@ fun Dashboard(
     val keyPoolState by keyPoolViewModel.state.collectAsStateWithLifecycle()
     val pluginViewModel: SubscriptionPluginViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val pluginState by pluginViewModel.state.collectAsStateWithLifecycle()
+    val profileViewModel: ChatProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val profileState by profileViewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(layout) {
         pluginViewModel.initialize(layout)
@@ -184,6 +186,7 @@ fun Dashboard(
                     }
                     AppPage.CHAT -> {
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
+                        ChatProfileCard(profileViewModel, profileState)
                         ChatPanel(chatViewModel, shell.models.map { it.id },
                             shell.models.associate { it.id to (it.displayName?.takeIf(String::isNotBlank) ?: it.id) },
                             shell.selectedModel, appShell::selectModel, clientReady && shell.catalogValid, providerBusy)
@@ -816,6 +819,116 @@ private fun SubscriptionPluginCard(
             }
             if (pluginState.notice.isNotEmpty()) {
                 Text(pluginState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatProfileCard(
+    viewModel: ChatProfileViewModel,
+    profileState: ChatProfileUiState,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var editMode by remember { mutableStateOf(false) }
+    var newId by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
+    var newPrompt by remember { mutableStateOf("") }
+    var newTemp by remember { mutableStateOf("0.7") }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("智能体与配置预设 (Agent Profiles)", style = MaterialTheme.typography.titleMedium)
+            val active = profileState.activeProfile
+            Text(
+                "当前预设: " + active.name + " (" + active.id + ") · 温度: " + active.temperature,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (active.systemPrompt.isNotBlank()) {
+                Text(
+                    "系统提示词: " + active.systemPrompt,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { expanded = true }) {
+                    Text("切换预设 (" + profileState.profiles.size + ")")
+                }
+                TextButton(onClick = { editMode = !editMode }) {
+                    Text(if (editMode) "收起新建" else "新建预设")
+                }
+            }
+
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                profileState.profiles.forEach { profile ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(profile.name + if (profile.id == active.id) " (当前)" else "")
+                                Text("T: " + profile.temperature + " · " + profile.id, style = MaterialTheme.typography.bodySmall)
+                            }
+                        },
+                        onClick = {
+                            viewModel.selectProfile(profile.id)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+
+            if (editMode) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(
+                        value = newId,
+                        onValueChange = { newId = it },
+                        label = { Text("Profile 标识 (例如: code-helper)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("预设名称 (例如: 编程助手)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newPrompt,
+                        onValueChange = { newPrompt = it },
+                        label = { Text("系统提示词 (System Prompt)") },
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newTemp,
+                        onValueChange = { newTemp = it },
+                        label = { Text("采样温度 (0.0 .. 2.0)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        enabled = newId.isNotBlank() && newName.isNotBlank(),
+                        onClick = {
+                            val tempVal = newTemp.toDoubleOrNull() ?: 0.7
+                            viewModel.saveProfile(newId, newName, newPrompt, temperature = tempVal)
+                            newId = ""
+                            newName = ""
+                            newPrompt = ""
+                            editMode = false
+                        }
+                    ) {
+                        Text("保存预设")
+                    }
+                }
+            }
+
+            if (profileState.error.isNotEmpty()) {
+                Text(profileState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (profileState.notice.isNotEmpty()) {
+                Text(profileState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

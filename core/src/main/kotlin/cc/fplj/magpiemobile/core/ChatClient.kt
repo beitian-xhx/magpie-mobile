@@ -23,11 +23,19 @@ class ChatClient(private val config: GatewayConfig) {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** 非流式一轮对话。 */
-    fun complete(model: String, messages: List<Message>, maxTokens: Int? = null): String {
+    fun complete(
+        model: String,
+        messages: List<Message>,
+        maxTokens: Int? = null,
+        temperature: Double? = null,
+        topP: Double? = null,
+    ): String {
         val body = buildJsonObject {
             put("model", model)
             put("messages", json.encodeToJsonElement(ListSerializer(Message.serializer()), messages))
             if (maxTokens != null) put("max_tokens", maxTokens)
+            if (temperature != null) put("temperature", temperature)
+            if (topP != null) put("top_p", topP)
         }.toString()
 
         val conn = URL(config.chatCompletionsPath()).openConnection(java.net.Proxy.NO_PROXY) as HttpURLConnection
