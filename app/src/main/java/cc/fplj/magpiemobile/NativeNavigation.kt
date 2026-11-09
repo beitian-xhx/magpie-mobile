@@ -53,6 +53,8 @@ fun Dashboard(
     val pluginState by pluginViewModel.state.collectAsStateWithLifecycle()
     val profileViewModel: ChatProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
+    val mcpViewModel: McpViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val mcpState by mcpViewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(layout) {
         pluginViewModel.initialize(layout)
@@ -169,6 +171,10 @@ fun Dashboard(
                         SubscriptionPluginCard(
                             viewModel = pluginViewModel,
                             pluginState = pluginState
+                        )
+                        McpServerCard(
+                            viewModel = mcpViewModel,
+                            mcpState = mcpState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -720,6 +726,119 @@ private fun KeyPoolingCard(
             }
             if (poolState.notice.isNotEmpty()) {
                 Text(poolState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun McpServerCard(
+    viewModel: McpViewModel,
+    mcpState: McpUiState,
+) {
+    var editMode by remember { mutableStateOf(false) }
+    var newId by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
+    var newEndpoint by remember { mutableStateOf("http://127.0.0.1:8080/mcp") }
+    var newDesc by remember { mutableStateOf("") }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("MCP 服务与受控工具 (Model Context Protocol)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "受控端点: " + mcpState.servers.size + " 个 (已启用: " + mcpState.activeCount + ") · 支持 HTTP/SSE/STDIO 契约",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (mcpState.servers.isNotEmpty()) {
+                mcpState.servers.forEach { server ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(server.name + " (" + server.transport.name + ")", style = MaterialTheme.typography.bodyMedium)
+                            Text(server.endpoint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            if (server.description.isNotBlank()) {
+                                Text(server.description, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Row {
+                            TextButton(onClick = { viewModel.toggleServer(server.id) }) {
+                                Text(if (server.enabled) "已启用" else "已停用")
+                            }
+                            TextButton(onClick = { viewModel.deleteServer(server.id) }) {
+                                Text("删除")
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text("暂无注册的 MCP 服务。仅允许本地环回 (127.0.0.1) 或安全 HTTPS 端点。", style = MaterialTheme.typography.bodySmall)
+            }
+
+            Button(onClick = { editMode = !editMode }) {
+                Text(if (editMode) "收起注册面板" else "注册新 MCP 服务")
+            }
+
+            if (editMode) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(
+                        value = newId,
+                        onValueChange = { newId = it },
+                        label = { Text("服务标识 (例如: local-math)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("服务名称 (例如: 本地数学计算器)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newEndpoint,
+                        onValueChange = { newEndpoint = it },
+                        label = { Text("端点 URL (环回 HTTP 或远程 HTTPS)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newDesc,
+                        onValueChange = { newDesc = it },
+                        label = { Text("描述说明 (可选)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        enabled = newId.isNotBlank() && newName.isNotBlank() && newEndpoint.isNotBlank(),
+                        onClick = {
+                            viewModel.addServer(
+                                id = newId,
+                                name = newName,
+                                transport = cc.fplj.magpiemobile.core.McpTransport.HTTP,
+                                endpoint = newEndpoint,
+                                description = newDesc
+                            )
+                            newId = ""
+                            newName = ""
+                            newEndpoint = "http://127.0.0.1:8080/mcp"
+                            newDesc = ""
+                            editMode = false
+                        }
+                    ) {
+                        Text("保存并注册")
+                    }
+                }
+            }
+
+            if (mcpState.error.isNotEmpty()) {
+                Text(mcpState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (mcpState.notice.isNotEmpty()) {
+                Text(mcpState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
