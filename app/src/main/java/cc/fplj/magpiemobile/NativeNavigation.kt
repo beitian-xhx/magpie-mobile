@@ -45,6 +45,8 @@ fun Dashboard(
     val keysState by keysViewModel.state.collectAsStateWithLifecycle()
     val usageViewModel: UsageViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val usageState by usageViewModel.state.collectAsStateWithLifecycle()
+    val routingViewModel: RoutingViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val routingState by routingViewModel.state.collectAsStateWithLifecycle()
     var providerBusy by remember { mutableStateOf(false) }
     var diagnosing by remember { mutableStateOf(false) }
     var diagnostic by remember { mutableStateOf("") } // Never DataStore/Bundle.
@@ -143,6 +145,11 @@ fun Dashboard(
                             clientReady = clientReady,
                             viewModel = usageViewModel,
                             usageState = usageState
+                        )
+                        ModelRoutingCard(
+                            clientReady = clientReady,
+                            viewModel = routingViewModel,
+                            routingState = routingState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -493,6 +500,110 @@ private fun RecentRequestsCard(
 
             if (usageState.error.isNotEmpty()) {
                 Text(usageState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelRoutingCard(
+    clientReady: Boolean,
+    viewModel: RoutingViewModel,
+    routingState: RoutingUiState,
+) {
+    var newAlias by remember { mutableStateOf("") }
+    var newTarget by remember { mutableStateOf("") }
+    var newFallback by remember { mutableStateOf("") }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("模型别名与路由降级 (Model Routing)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "配置客户端模型别名映射（例如将 gpt-4o 别名映射至指定提供商模型），并定义备用回退链。",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            if (routingState.rules.isEmpty()) {
+                Text("暂无路由别名规则；所有模型请求将直接路由至提供商原生目录。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                routingState.rules.forEach { rule ->
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    rule.alias + " -> " + rule.targetModel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (rule.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                )
+                                if (rule.fallbackModels.isNotEmpty()) {
+                                    Text(
+                                        "回退链: " + rule.fallbackModels.joinToString(", "),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { viewModel.toggleRule(rule.alias) }) {
+                                    Text(if (rule.enabled) "已启用" else "已停用")
+                                }
+                                TextButton(onClick = { viewModel.removeRule(rule.alias) }) {
+                                    Text("删除")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedTextField(
+                    value = newAlias,
+                    onValueChange = { newAlias = it },
+                    label = { Text("请求别名 (例如: fast-chat)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = newTarget,
+                    onValueChange = { newTarget = it },
+                    label = { Text("目标模型 (例如: openai/gpt-4o-mini)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = newFallback,
+                    onValueChange = { newFallback = it },
+                    label = { Text("备选回退模型 (可选，英文逗号分隔)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    enabled = newAlias.isNotBlank() && newTarget.isNotBlank(),
+                    onClick = {
+                        val fallbacks = newFallback.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        viewModel.addRule(newAlias, newTarget, fallbacks)
+                        newAlias = ""
+                        newTarget = ""
+                        newFallback = ""
+                    }
+                ) {
+                    Text("添加路由规则")
+                }
+            }
+
+            if (routingState.error.isNotEmpty()) {
+                Text(routingState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (routingState.notice.isNotEmpty()) {
+                Text(routingState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
