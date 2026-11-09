@@ -49,6 +49,12 @@ fun Dashboard(
     val routingState by routingViewModel.state.collectAsStateWithLifecycle()
     val keyPoolViewModel: KeyPoolViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val keyPoolState by keyPoolViewModel.state.collectAsStateWithLifecycle()
+    val pluginViewModel: SubscriptionPluginViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val pluginState by pluginViewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(layout) {
+        pluginViewModel.initialize(layout)
+    }
     var providerBusy by remember { mutableStateOf(false) }
     var diagnosing by remember { mutableStateOf(false) }
     var diagnostic by remember { mutableStateOf("") } // Never DataStore/Bundle.
@@ -157,6 +163,10 @@ fun Dashboard(
                             clientReady = clientReady,
                             viewModel = keyPoolViewModel,
                             poolState = keyPoolState
+                        )
+                        SubscriptionPluginCard(
+                            viewModel = pluginViewModel,
+                            pluginState = pluginState
                         )
                         ModelCatalogCard(shell, clientReady, !chat.sending, appShell::refreshModels)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -707,6 +717,105 @@ private fun KeyPoolingCard(
             }
             if (poolState.notice.isNotEmpty()) {
                 Text(poolState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubscriptionPluginCard(
+    viewModel: SubscriptionPluginViewModel,
+    pluginState: PluginUiState,
+) {
+    var pluginId by remember { mutableStateOf("") }
+    var pluginName by remember { mutableStateOf("") }
+    val pluginVersion = "1.0.0"
+    val pluginEntry = "index.js"
+    val pluginScript = "console.log('Plugin initialized');"
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("订阅插件与 Bun 运行时 (Subscription Plugins & Bun)", style = MaterialTheme.typography.titleMedium)
+            val bunText = if (pluginState.bunStatus.installed) {
+                "Bun 载荷：预置就绪 (" + pluginState.bunStatus.architecture + ")"
+            } else {
+                "Bun 载荷：未检测到预置 ELF"
+            }
+            Text(bunText, style = MaterialTheme.typography.bodySmall, color = if (pluginState.bunStatus.installed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+
+            if (pluginState.plugins.isEmpty()) {
+                Text("暂无已安装订阅插件；可在下方沙箱中录入并执行订阅逻辑。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                pluginState.plugins.forEach { plugin ->
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    plugin.name + " (" + plugin.id + " v" + plugin.version + ")",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (plugin.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    "入口: " + plugin.entrypoint + " · SHA: " + plugin.checksum.take(12) + "…",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { viewModel.togglePlugin(plugin.id) }) {
+                                    Text(if (plugin.enabled) "已启用" else "已停用")
+                                }
+                                TextButton(onClick = { viewModel.rollbackPlugin(plugin.id) }) {
+                                    Text("回滚")
+                                }
+                                TextButton(onClick = { viewModel.removePlugin(plugin.id) }) {
+                                    Text("移除")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedTextField(
+                    value = pluginId,
+                    onValueChange = { pluginId = it },
+                    label = { Text("插件标识 (例如: custom-filter)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = pluginName,
+                    onValueChange = { pluginName = it },
+                    label = { Text("插件名称 (例如: Custom Filter)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    enabled = pluginId.isNotBlank() && pluginName.isNotBlank(),
+                    onClick = {
+                        viewModel.installPlugin(pluginId, pluginName, pluginVersion, pluginEntry, pluginScript)
+                        pluginId = ""
+                        pluginName = ""
+                    }
+                ) {
+                    Text("安装/更新插件")
+                }
+            }
+
+            if (pluginState.error.isNotEmpty()) {
+                Text(pluginState.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (pluginState.notice.isNotEmpty()) {
+                Text(pluginState.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
