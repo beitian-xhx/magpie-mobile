@@ -54,3 +54,8 @@
 - 变更集中域：`internal/agent`(167 文件)、`internal/cli`(28)、`internal/catalog`(14)、`internal/claudetui`(13)、`internal/access`(12)——均为桌面 Agent/CLI 域，移动端不触及；
 - **升级路径（需用户确认后执行）**：更新 CI 的 checkout ref 与 CORE_VERSION → `apply-mobile-core.py` 重新钉 24 文件哈希 → 全量契约/JVM/Go 测试 → 新版本发版；
 - 风险点：Bun 运行时与插件兼容性需在新核心下重验（fetch-assets.sh 钉死版本）；新核心二进制 SHA-256 变化会改变 APK 哈希（固定签名不受影响）。
+## 6. 上游移动域稳定性结论（v0.1.3188 → v0.1.3622 巡检）
+
+- compare 分析（595 commits / 300 files）显示：文件名含 "mobile" 的上游变更文件数为 **0**——移动策略域在上游 5 个大版本迭代中完全稳定；
+- 上游 v0.1.3622 release note 仅有桌面窗口拖拽 bug 修复，无移动相关功能变化；
+- 上游发版节奏快（3622 发布数小时后 feed 已指向 3624），plan.md §2.1 锁定策略正确；后续升级评估可直接引用本结论预期"移动域零冲突"。
