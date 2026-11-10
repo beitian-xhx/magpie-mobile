@@ -110,7 +110,7 @@ class CoreManagementClientTest {
 
     @Test fun usageSummarySendsPeriodAndRejectsUnknown() {
         val body = api.client().usageSummary("today")
-        assertTrue(body.contains(""totals""))
+        assertTrue(body.contains("\"totals\""))
         val request = api.requests.single { it.path == "/api/usage" }
         assertEquals("GET", request.method)
         // 非法 period 在客户端即拒绝，不发请求
