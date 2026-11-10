@@ -64,6 +64,12 @@ class CoreManagementClient(
         return transport.request("GET", endpoint.path)
     }
 
+    /** GET /api/notices (upstream 54dc257f): open-source license notices text. Bounded display. */
+    fun notices(): String {
+        val body = transport.request("GET", "/api/notices")
+        return decode { json.decodeFromString(NoticesResponse.serializer(), body).text }
+    }
+
     /** Exactly one add-key POST, sending only name. The core generates 24 bytes (48 hex).
      * access.List() removes every row secret. Associate the top-level secret only with the
      * unique newly added id/name, using the immediately preceding GET id set; never masked.
@@ -181,6 +187,8 @@ data class CallerKeyModel(
 )
 @Serializable
 private data class CallerKeyModelsResponse(val models: List<CallerKeyModel> = emptyList())
+@Serializable
+private data class NoticesResponse(val text: String = "")
 @Serializable
 private data class CreatedCallerKeyResponse(val keys: List<RegisteredGatewayKey>, val secret: String)
 @Serializable

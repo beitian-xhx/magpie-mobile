@@ -34,7 +34,8 @@ func mobileAPIAllowed(method, p string) bool {
 	if method == http.MethodGet {
 		switch p {
 		case "/api/mobile/capabilities", "/api/caller-keys", "/api/caller-keys/models", "/api/state", "/api/providers",
-			"/api/usage/requests", "/api/usage/heatmap", "/api/usage/quotas", "/api/usage/quotas/history":
+			"/api/usage/requests", "/api/usage/heatmap", "/api/usage/quotas", "/api/usage/quotas/history",
+			"/api/notices":
 			return true
 		}
 	}

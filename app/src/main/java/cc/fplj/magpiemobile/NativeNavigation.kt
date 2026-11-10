@@ -216,6 +216,8 @@ fun Dashboard(
                             shell.selectedModel, appShell::selectModel, clientReady && shell.catalogValid, providerBusy)
                     }
                     AppPage.MORE -> {
+                        val noticesViewModel: NoticesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                        val noticesState by noticesViewModel.state.collectAsStateWithLifecycle()
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("本机界面偏好", style = MaterialTheme.typography.titleMedium)
@@ -298,6 +300,11 @@ fun Dashboard(
                             }
                         }
                         Text("订阅、高级路由、统计和资源库仍按批准计划推进；这些入口尚未交付，不以灰色按钮充当完成。", style = MaterialTheme.typography.bodySmall)
+                        LicenseNoticesCard(
+                            clientReady = clientReady,
+                            viewModel = noticesViewModel,
+                            noticesState = noticesState,
+                        )
                     }
                 }
             }

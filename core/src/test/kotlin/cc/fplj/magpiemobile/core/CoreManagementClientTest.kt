@@ -108,6 +108,14 @@ class CoreManagementClientTest {
         assertNull(post.origin)
     }
 
+    @Test fun noticesReturnsLicenseText() {
+        val text = api.client().notices()
+        assertTrue(text.contains("MIT License"))
+        val request = api.requests.single { it.path == "/api/notices" }
+        assertEquals("GET", request.method)
+        assertEquals(api.credential.cookieHeader(), request.cookie)
+    }
+
     @Test fun callerKeyModelsParsesCatalogMetadata() {
         val models = api.client().callerKeyModels()
         assertEquals(3, models.size)
@@ -296,6 +304,7 @@ internal class ManagementApiFixture : AutoCloseable {
                     "GET /api/mobile/capabilities" -> respond(exchange, 200, capabilitiesBody)
                     "GET /api/state" -> respond(exchange, 200, """{"anything":{"nested":[1,2,3]},"version":7}""")
                     "GET /api/usage/requests" -> respond(exchange, 200, """{"requests":[{"id":"req-1","model":"gpt-4o","status":200,"duration":150,"total_tokens":42}]}""")
+                    "GET /api/notices" -> respond(exchange, 200, """{"text":"Magpie is MIT License. Bundled third-party components: MIT License, Apache-2.0."}""")
                     "GET /api/caller-keys/models" -> respond(exchange, 200, """{"models":[
                         {"id":"group/zero","name":"Zero 组","group":true},
                         {"id":"openai/gpt-4o","name":"GPT-4o","provider":"openai","providerName":"OpenAI"},
