@@ -13,8 +13,8 @@ android {
         applicationId = "cc.fplj.magpiemobile"
         minSdk = 29
         targetSdk = 35
-        versionCode = 23
-        versionName = "0.1.22-session-manage"
+        versionCode = 24
+        versionName = "0.1.23-refactor-split"
         buildConfigField("String", "CORE_VERSION", "\"0.1.3188-mobile.4\"")
         buildConfigField("String", "GIT_SHA", "\"" + (System.getenv("GITHUB_SHA")?.take(8) ?: "local") + "\"")
     }
