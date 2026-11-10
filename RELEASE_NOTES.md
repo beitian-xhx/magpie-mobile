@@ -1,10 +1,8 @@
-## Magpie-Mobile 0.1.23-refactor-split (P5-2 结构优化)
+## Magpie-Mobile 0.1.24-key-models (P5-3 功能对齐)
 
-### 结构优化（零行为变更）
-- **NativeNavigation.kt 拆分（1206 → 314 行）**:
-  - 网关接入/密钥/最近请求三卡 → GatewayCards.kt（287 行）；
-  - 模型路由/Key 轮询两卡 → RoutingCards.kt（219 行）；
-  - 系统稳定性/插件市场/MCP 三卡 → SystemCards.kt（219 行）；
-  - 订阅插件/Chat Profile/模型目录三卡 → ChatCards.kt（246 行）；
-  - 拆分为纯代码移动：全部 11 个卡片段经字节级比对与原文件一致，Dashboard 与辅助函数原样保留，括号平衡与 import 无重复；
-  - 构建与测试由 GitHub Actions 全量回归验证。
+### 功能对齐原版 Magpie（54dc257f）
+- **网关密钥可见模型目录（/api/caller-keys/models）**:
+  - 新增 `CoreManagementClient.callerKeyModels()`，对接原版 `caller_keys.go` 的 keyModelJSON 契约（id/name/provider/providerName/group/account/key/plan）；
+  - 该端点是原版 GUI 模型选择器（含路由组 group/<id>、账号条目与决策模型）的数据源，移动端此前仅用 /v1/models，缺少按密钥可见性与路由组语义；
+  - 纯元数据接口，无任何密钥明文；复用既有 BoundedCoreHttp 传输与 webGuard cookie 安全栈；
+  - CoreManagementClientTest 新增解析与请求契约测试（路由组/提供商/账号三类条目）。

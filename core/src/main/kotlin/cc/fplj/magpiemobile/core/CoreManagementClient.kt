@@ -49,6 +49,16 @@ class CoreManagementClient(
         return decode { json.decodeFromString(CallerKeysResponse.serializer(), body).keys.map { it.copy(secret = "") } }
     }
 
+    /**
+     * GET /api/caller-keys/models (upstream 54dc257f caller_keys.go): the model catalog a
+     * caller key may reach, including routing groups and account/decision entries.
+     * Metadata only; no secrets are present in this response.
+     */
+    fun callerKeyModels(): List<CallerKeyModel> {
+        val body = transport.request("GET", "/api/caller-keys/models")
+        return decode { json.decodeFromString(CallerKeyModelsResponse.serializer(), body).models }
+    }
+
     /** Exactly one add-key POST, sending only name. The core generates 24 bytes (48 hex).
      * access.List() removes every row secret. Associate the top-level secret only with the
      * unique newly added id/name, using the immediately preceding GET id set; never masked.
@@ -151,6 +161,21 @@ data class RegisteredGatewayKey(
 
 @Serializable
 private data class CallerKeysResponse(val keys: List<RegisteredGatewayKey>)
+
+/** Upstream keyModelJSON (caller_keys.go): id is "<provider>/<model>" or "group/<id>". */
+@Serializable
+data class CallerKeyModel(
+    val id: String,
+    val name: String,
+    val provider: String? = null,
+    val providerName: String? = null,
+    val group: Boolean = false,
+    val account: Boolean = false,
+    val key: Boolean = false,
+    val plan: String? = null,
+)
+@Serializable
+private data class CallerKeyModelsResponse(val models: List<CallerKeyModel> = emptyList())
 @Serializable
 private data class CreatedCallerKeyResponse(val keys: List<RegisteredGatewayKey>, val secret: String)
 @Serializable

@@ -108,6 +108,21 @@ class CoreManagementClientTest {
         assertNull(post.origin)
     }
 
+    @Test fun callerKeyModelsParsesCatalogMetadata() {
+        val models = api.client().callerKeyModels()
+        assertEquals(3, models.size)
+        assertEquals("group/zero", models[0].id)
+        assertTrue(models[0].group)
+        assertEquals("openai/gpt-4o", models[1].id)
+        assertEquals("OpenAI", models[1].providerName)
+        assertFalse(models[1].group)
+        assertEquals("anthropic/claude", models[2].id)
+        assertTrue(models[2].account)
+        val request = api.requests.single { it.path == "/api/caller-keys/models" }
+        assertEquals("GET", request.method)
+        assertEquals(api.credential.cookieHeader(), request.cookie)
+    }
+
     @Test fun recentRequestsReturnsParsedList() {
         val list = api.client().recentRequests(5)
         assertEquals(1, list.size)
@@ -281,6 +296,11 @@ internal class ManagementApiFixture : AutoCloseable {
                     "GET /api/mobile/capabilities" -> respond(exchange, 200, capabilitiesBody)
                     "GET /api/state" -> respond(exchange, 200, """{"anything":{"nested":[1,2,3]},"version":7}""")
                     "GET /api/usage/requests" -> respond(exchange, 200, """{"requests":[{"id":"req-1","model":"gpt-4o","status":200,"duration":150,"total_tokens":42}]}""")
+                    "GET /api/caller-keys/models" -> respond(exchange, 200, """{"models":[
+                        {"id":"group/zero","name":"Zero 组","group":true},
+                        {"id":"openai/gpt-4o","name":"GPT-4o","provider":"openai","providerName":"OpenAI"},
+                        {"id":"anthropic/claude","name":"Claude","provider":"anthropic","providerName":"Anthropic","account":true,"plan":"pro"}
+                    ]}""")
                     "GET /api/caller-keys" -> {
                         listRequests.incrementAndGet()
                         val handler = listHandler
