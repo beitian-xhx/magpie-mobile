@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun SubscriptionPluginCard(
+internal fun SubscriptionPluginCard(
     viewModel: SubscriptionPluginViewModel,
     pluginState: PluginUiState,
 ) {
@@ -117,7 +117,7 @@ private fun SubscriptionPluginCard(
 
 
 @Composable
-private fun ChatProfileCard(
+internal fun ChatProfileCard(
     viewModel: ChatProfileViewModel,
     profileState: ChatProfileUiState,
 ) {
@@ -228,7 +228,7 @@ private fun ChatProfileCard(
 
 
 @Composable
-private fun ModelCatalogCard(shell: AppShellState, ready: Boolean, idle: Boolean, refresh: () -> Unit) {
+internal fun ModelCatalogCard(shell: AppShellState, ready: Boolean, idle: Boolean, refresh: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("模型目录与速览", style = MaterialTheme.typography.titleMedium)

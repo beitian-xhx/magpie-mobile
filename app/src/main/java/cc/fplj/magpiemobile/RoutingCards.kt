@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun ModelRoutingCard(
+internal fun ModelRoutingCard(
     clientReady: Boolean,
     viewModel: RoutingViewModel,
     routingState: RoutingUiState,
@@ -122,7 +122,7 @@ private fun ModelRoutingCard(
 
 
 @Composable
-private fun KeyPoolingCard(
+internal fun KeyPoolingCard(
     clientReady: Boolean,
     viewModel: KeyPoolViewModel,
     poolState: KeyPoolUiState,

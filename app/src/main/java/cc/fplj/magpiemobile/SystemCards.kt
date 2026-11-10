@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun SystemStabilityCard(
+internal fun SystemStabilityCard(
     viewModel: StabilityViewModel,
     stabilityState: SystemStabilityUiState,
 ) {
@@ -60,7 +60,7 @@ private fun SystemStabilityCard(
 
 
 @Composable
-private fun PluginMarketCard(
+internal fun PluginMarketCard(
     viewModel: PluginMarketViewModel,
     marketState: PluginMarketUiState,
 ) {
@@ -105,7 +105,7 @@ private fun PluginMarketCard(
 
 
 @Composable
-private fun McpServerCard(
+internal fun McpServerCard(
     viewModel: McpViewModel,
     mcpState: McpUiState,
 ) {

@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun GatewayEndpointCard(
+internal fun GatewayEndpointCard(
     running: Boolean,
     clientReady: Boolean,
     currentGatewayKey: String?,
@@ -85,7 +85,7 @@ private fun GatewayEndpointCard(
 
 
 @Composable
-private fun GatewayKeysCard(
+internal fun GatewayKeysCard(
     clientReady: Boolean,
     viewModel: GatewayKeysViewModel,
     keysState: GatewayKeysUiState,
@@ -211,7 +211,7 @@ private fun GatewayKeysCard(
 
 
 @Composable
-private fun RecentRequestsCard(
+internal fun RecentRequestsCard(
     clientReady: Boolean,
     viewModel: UsageViewModel,
     usageState: UsageUiState,
