@@ -70,6 +70,39 @@ class UsageClientTest {
     }
 
     @Test
+    fun usageInsightHitsExactPathWithAdminCookie() {
+        for (endpoint in listOf(UsageInsightEndpoint.HEATMAP, UsageInsightEndpoint.QUOTAS, UsageInsightEndpoint.QUOTAS_HISTORY)) {
+            var seenPath: String? = null
+            var seenCookie: String? = null
+            server.createContext(endpoint.path) { ex ->
+                seenPath = ex.requestURI.path
+                seenCookie = ex.requestHeaders.getFirst("Cookie")
+                val body = """{"ok":true}"""
+                ex.sendResponseHeaders(200, body.toByteArray().size.toLong())
+                ex.responseBody.use { it.write(body.toByteArray()) }
+            }
+            val body = UsageClient(config()).usageInsight(endpoint)
+            assertEquals(endpoint.path, seenPath)
+            assertEquals("magpie_web_3430=sess-abc", seenCookie)
+            assertEquals("""{"ok":true}""", body)
+        }
+    }
+
+    @Test
+    fun usageInsightMissingCookieFailsFast() {
+        val e = assertFailsWith<UsageException> { UsageClient(config(withCookie = false)).usageInsight(UsageInsightEndpoint.HEATMAP) }
+        assertTrue(e.message!!.contains("cookie"))
+        assertEquals(0, e.httpCode)
+    }
+
+    @Test
+    fun usageInsightErrorPropagatesCode() {
+        server.createContext("/api/usage/heatmap") { ex -> ex.sendResponseHeaders(500, -1) }
+        val e = assertFailsWith<UsageException> { UsageClient(config()).usageInsight(UsageInsightEndpoint.HEATMAP) }
+        assertEquals(500, e.httpCode)
+    }
+
+    @Test
     fun parseUsageRecordsParsesNestedRequestsAndTokens() {
         val sampleJson = """
             {

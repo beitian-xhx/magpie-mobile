@@ -63,6 +63,30 @@ class UsageClient(private val config: GatewayConfig) {
         return parseUsageRecords(raw)
     }
 
+    /**
+     * 只读用量洞察端点（P5-4）：/api/usage/heatmap、/api/usage/quotas、/api/usage/quotas/history。
+     * 上游形状未钉死为稳定 schema，返回原始 JSON 文本，UI 侧做弹性解析；
+     * 响应硬上限 2MB，管理 cookie 鉴权与 recentRequests 相同。
+     */
+    fun usageInsight(endpoint: UsageInsightEndpoint): String {
+        val cookie = config.adminCookie
+            ?: throw UsageException("管理 cookie 缺失：管理面请求必须带 webGuard 签发的 cookie", 0)
+        val conn = URL(config.adminBaseUrl + endpoint.path)
+            .openConnection() as HttpURLConnection
+        conn.connectTimeout = config.connectTimeout.toMillis().toInt()
+        conn.readTimeout = config.readTimeout.toMillis().toInt()
+        conn.setRequestProperty("Cookie", "magpie_web_3430=" + cookie)
+        try {
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { reader -> reader.readText().take(MAX_INSIGHT_CHARS) }.orEmpty()
+            if (code !in 200..299) throw UsageException("usage insight -> HTTP " + code, code)
+            return text
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     companion object {
         fun parseUsageRecords(jsonText: String): List<UsageRecord> {
             if (jsonText.isBlank()) return emptyList()
@@ -124,3 +148,13 @@ class UsageClient(private val config: GatewayConfig) {
 }
 
 class UsageException(message: String, val httpCode: Int) : RuntimeException(message)
+
+/** 白名单化只读洞察端点：精确路径，非前缀。 */
+enum class UsageInsightEndpoint(internal val path: String) {
+    HEATMAP("/api/usage/heatmap"),
+    QUOTAS("/api/usage/quotas"),
+    QUOTAS_HISTORY("/api/usage/quotas/history"),
+}
+
+/** 单次洞察响应的安全上限（2M 字符）。 */
+const val MAX_INSIGHT_CHARS: Int = 2_000_000

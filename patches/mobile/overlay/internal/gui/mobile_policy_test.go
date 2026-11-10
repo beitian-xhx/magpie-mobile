@@ -80,7 +80,7 @@ func TestMobileGUIExactWhitelist(t *testing.T) {
 	})))
 	allowed := []struct{ method, p string }{
 		{"GET", "/api/caller-keys"}, {"GET", "/api/caller-keys/models"}, {"GET", "/api/state"}, {"GET", "/api/providers"},
-		{"GET", "/api/usage/requests"},
+		{"GET", "/api/usage/requests"}, {"GET", "/api/usage/heatmap"}, {"GET", "/api/usage/quotas"}, {"GET", "/api/usage/quotas/history"},
 		{"POST", "/api/caller-keys/add-key"}, {"POST", "/api/caller-keys/copy-key"},
 	}
 	for _, entry := range allowed {
