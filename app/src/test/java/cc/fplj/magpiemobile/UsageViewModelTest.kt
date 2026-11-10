@@ -119,4 +119,35 @@ class UsageViewModelTest {
         assertTrue(cleared.requests.isEmpty())
         assertEquals("", cleared.error)
     }
+
+    @Test
+    fun loadInsightsStoresRawJsonAndRecoversFromError() = runTest(testDispatcher) {
+        val calls = AtomicInteger()
+        val vm = UsageViewModel(
+            requestsReader = { emptyList() },
+            insightsReader = { endpoint ->
+                calls.incrementAndGet()
+                if (endpoint == cc.fplj.magpiemobile.core.UsageInsightEndpoint.HEATMAP) """{"days":[1,2,3]}"""
+                else """{"openai":{"remaining":100}}"""
+            },
+        )
+        vm.loadInsights()
+        advanceUntilIdle()
+        assertEquals(2, calls.get())
+        assertEquals("""{"days":[1,2,3]}""", vm.state.value.heatmapJson)
+        assertEquals("""{"openai":{"remaining":100}}""", vm.state.value.quotasJson)
+        assertEquals("", vm.state.value.insightsError)
+
+        val failing = UsageViewModel(
+            requestsReader = { emptyList() },
+            insightsReader = { throw IllegalStateException("HTTP 503") },
+        )
+        failing.loadInsights()
+        advanceUntilIdle()
+        assertFalse(failing.state.value.insightsLoading)
+        assertTrue(failing.state.value.insightsError.contains("503"))
+        // 主请求状态不受洞察失败影响。
+        assertTrue(failing.state.value.requests.isEmpty())
+        assertEquals("", failing.state.value.error)
+    }
 }

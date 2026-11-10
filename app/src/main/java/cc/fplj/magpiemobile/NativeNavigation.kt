@@ -163,6 +163,11 @@ fun Dashboard(
                             viewModel = usageViewModel,
                             usageState = usageState
                         )
+                        UsageInsightsCard(
+                            clientReady = clientReady,
+                            viewModel = usageViewModel,
+                            usageState = usageState
+                        )
                         ModelRoutingCard(
                             clientReady = clientReady,
                             viewModel = routingViewModel,

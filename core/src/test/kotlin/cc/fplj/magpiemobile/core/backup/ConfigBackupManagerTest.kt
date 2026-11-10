@@ -169,7 +169,7 @@ class ConfigBackupManagerTest {
             {
               "schemaVersion": 1,
               "appName": "Magpie-Mobile",
-              "appVersion": "0.1.25",
+              "appVersion": "0.1.26",
               "exportedAt": "2026-11-08T12:00:00Z",
               "providers": [
                 {
@@ -202,7 +202,7 @@ class ConfigBackupManagerTest {
             {
               "schemaVersion": 1,
               "appName": "Magpie-Mobile",
-              "appVersion": "0.1.25",
+              "appVersion": "0.1.26",
               "exportedAt": "2026-11-08T12:00:00Z",
               "providers": [
                 {

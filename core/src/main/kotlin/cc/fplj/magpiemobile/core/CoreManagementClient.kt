@@ -59,6 +59,11 @@ class CoreManagementClient(
         return decode { json.decodeFromString(CallerKeyModelsResponse.serializer(), body).models }
     }
 
+    /** Read-only usage insight endpoints (whitelisted exact paths, P5-4). Returns raw JSON text. */
+    fun usageInsight(endpoint: UsageInsightEndpoint): String {
+        return transport.request("GET", endpoint.path)
+    }
+
     /** Exactly one add-key POST, sending only name. The core generates 24 bytes (48 hex).
      * access.List() removes every row secret. Associate the top-level secret only with the
      * unique newly added id/name, using the immediately preceding GET id set; never masked.

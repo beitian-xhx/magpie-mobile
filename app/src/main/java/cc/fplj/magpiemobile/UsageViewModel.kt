@@ -15,6 +15,11 @@ data class UsageUiState(
     val loading: Boolean = false,
     val requests: List<UsageRecord> = emptyList(),
     val error: String = "",
+    val insightsLoading: Boolean = false,
+    /** 原始洞察 JSON；上游 schema 未钉死，UI 侧弹性解析展示。 */
+    val heatmapJson: String = "",
+    val quotasJson: String = "",
+    val insightsError: String = "",
 )
 
 /**
@@ -24,6 +29,9 @@ data class UsageUiState(
 class UsageViewModel(
     private val requestsReader: suspend (Int) -> List<UsageRecord> = { limit ->
         withContext(Dispatchers.IO) { NativeCoreSession.managementClient().recentRequests(limit) }
+    },
+    private val insightsReader: suspend (UsageInsightEndpoint) -> String = { endpoint ->
+        withContext(Dispatchers.IO) { NativeCoreSession.managementClient().usageInsight(endpoint) }
     }
 ) : ViewModel() {
 
@@ -47,5 +55,22 @@ class UsageViewModel(
 
     fun clear() {
         mutable.update { UsageUiState() }
+    }
+
+    /** 拉取用量洞察（热力图 + 额度配额）；只读端点，失败不阻塞主状态。 */
+    fun loadInsights() {
+        if (mutable.value.insightsLoading) return
+        mutable.update { it.copy(insightsLoading = true, insightsError = "") }
+        viewModelScope.launch {
+            try {
+                val heatmap = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.HEATMAP) }
+                val quotas = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS) }
+                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                mutable.update { it.copy(insightsLoading = false, insightsError = e.message ?: "读取用量洞察失败") }
+            }
+        }
     }
 }
