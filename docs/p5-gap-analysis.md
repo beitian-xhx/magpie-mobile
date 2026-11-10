@@ -45,3 +45,12 @@
 
 1. **Usage 热力图 + 额度视图**（GET /api/usage/heatmap、/quotas、/history）：overlay 白名单加 3 个 GET，`UsageClient` 扩展三个解析方法 + 单测，`RecentRequestsCard` 旁新增 UsageInsightsCard。
 2. 遵循既有契约：精确路径白名单（非前缀）、`Cache-Control: no-store`、响应大小上限、密钥/账号名脱敏解析。
+---
+
+## 5. 上游升级评估（2026-11-10，v0.1.3188 → v0.1.3622）
+
+- **变更规模**：595 commits / 300 files（new commit `025123431c140a4988efc3d5c44546e8d73d16d3`，tag `v0.1.3622`）；
+- **补丁冲突面：零**——`patches/mobile/manifest.json` 钉死的全部 24 个上游文件（含 overlay 覆盖的 api.go/caller_keys.go/usage.go/mobile_policy.go/lan.go 等）在 595 commits 中**零变更**；
+- 变更集中域：`internal/agent`(167 文件)、`internal/cli`(28)、`internal/catalog`(14)、`internal/claudetui`(13)、`internal/access`(12)——均为桌面 Agent/CLI 域，移动端不触及；
+- **升级路径（需用户确认后执行）**：更新 CI 的 checkout ref 与 CORE_VERSION → `apply-mobile-core.py` 重新钉 24 文件哈希 → 全量契约/JVM/Go 测试 → 新版本发版；
+- 风险点：Bun 运行时与插件兼容性需在新核心下重验（fetch-assets.sh 钉死版本）；新核心二进制 SHA-256 变化会改变 APK 哈希（固定签名不受影响）。
