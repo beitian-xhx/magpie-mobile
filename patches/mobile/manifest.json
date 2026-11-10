@@ -221,11 +221,11 @@
     },
     {
       "path": "internal/gui/mobile_policy.go",
-      "sha256": "20b445e024b40df1e357f87179e77f12e9a0c9148148a1a2c47c562f13df608e"
+      "sha256": "555776a8077e377cd25b73f69239d2881e34e1d729073fafddce4e29ab7981fd"
     },
     {
       "path": "internal/gui/mobile_policy_test.go",
-      "sha256": "4aa1109b3d90978210465c0ba3b6589a1cf4cb8437d75367b1175d64ca126085"
+      "sha256": "d9ec1c96bd3e916acc24d9167a715372b44b8ac86a09b3d5579cfed716c51ee1"
     },
     {
       "path": "internal/gui/mobile_providers.go",
