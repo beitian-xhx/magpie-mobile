@@ -1,39 +1,43 @@
-# Magpie-Mobile（开发验证版）
+# Magpie-Mobile
 
-完整范围见 [移植计划](plan.md)。用户确认0.1.1在当前手机启停正常；本项目仍不是主要GUI功能完整覆盖版。
+把 [usemagpie.ai 的 Magpie](https://github.com/yetone/magpie)（AI 模型网关，MIT）移植为 Android 原生独立 APK：原生界面覆盖绝大部分可移植功能，提供后台模型网关、其他 App 接入与应用内聊天。完整范围见 [移植计划](plan.md)。
 
-## 当前版本：0.1.8-sessions（CI/真机验收分开）
+## 当前版本：0.1.30-upstream-3622（CI/真机验收分开）
 
-新增 [原生会话存储](docs/session-storage.md)：Room 会话/消息/操作状态、离线历史分页、成功上下文恢复。旧 JSONL 导入只读存档且保留原文件，不把混合旧记录当上下文。中断/失败不自动重发，旋转由 ViewModel 持有请求；新建会话保留历史。本阶段未包含 DataStore、SAF/M4 加密备份。
+- **上游核心**：v0.1.3622（commit `02512343`，从 v0.1.3188 基线升级，补丁冲突面为零）；
+- **真机稳定性（P4/P5）**：网络热切换监听、电池优化白名单引导、低内存告警、冷启动遥测（<800ms 门槛）、崩溃事后脱敏审计；
+- **功能对齐（P5/P6）**：历史会话重命名/删除、用量洞察四段卡片（聚合/热力图/额度/历史）、开源许可声明查看、密钥可见模型目录；
+- **既有能力（P2/P3）**：多提供商安全接入、模型目录发现、别名路由与降级、Key 轮询池、Bun 订阅插件（回滚可逆）、HTTP MCP 工具、Chat Profiles、多会话持久化。
 
-0.1.8 起使用 GitHub Secrets 固定 Release 签名，缺少 Secret/证书不符时 CI 拒绝发布。旧 0.1.6/0.1.7 的 Debug 公钥已核验彼此不同，新签名无法覆盖旧包；请保留旧应用，不卸载或清数据，迁移另行确认。
+## 文档索引
 
-修正Android目录网络失败：Android核心以NDK/CGO=1使用Bionic系统DNS，系统证书同时读取Conscrypt APEX与system路径，保留TLS校验。DNS、证书、网络、响应异常分开给出安全固定错误；不硬编码DNS或关闭证书校验。
+| 文档 | 内容 |
+| :--- | :--- |
+| [docs/upgrade-guide-0.1.30.md](docs/upgrade-guide-0.1.30.md) | **安装与验证指南**（安装步骤/healthz 判定/新功能清单/故障排查） |
+| [docs/p5-gap-analysis.md](docs/p5-gap-analysis.md) | 原版功能对齐缺口分析与终审裁定 |
+| [docs/structure-review.md](docs/structure-review.md) | 代码结构评估矩阵 |
+| [docs/delivery-p2/p3/p4.md](docs/) | P2/P3/P4 阶段交付报告 |
+| [docs/session-storage.md](docs/session-storage.md) | 会话存储契约 |
 
-修正0.1.3的默认手填模型流程：**Base URL/所需API Key → 自动只读目录 → 搜索/勾选模型 → 保存**。
+## 隐私说明
 
-- 支持省略HTTPS scheme、根地址、/v1及完整Chat endpoint输入，不重复追加/v1；展示实际Base URL。
-- URL及凭据稳定1秒后自动读目录；输入框仍有焦点或仅隐藏键盘也会触发，不要求IME Done。新建可匿名尝试公共目录，需Key时给明确提示。
-- 目录仅发送供应商GET，禁止redirect/推理/test/detect；有超时、大小、数量和凭据回显保护。编辑可同来源复用已存Key，不将旧Key自动转发到新来源。
-- 模型可搜索/全选/逐项选；新建自动采用返回目录，编辑保持原选中与目录未返回的已存模型。手填仅在高级设置作失败备选。
-- 名称/内部标识自动建议且避免已知冲突，手工改过不覆盖；技术ID放高级项。普通保存单操作，明确禁用所有模型才确认。
-- 独立编辑页，字段单行/密码键盘/IME与insets处理；错误在表单内显示，不让用户滚完整列表找编辑器。
-- 本地输入校验失败不丢密码；实际未知写保存非敏感待核对标记，跨表单仍阻止新写，健康只读刷新后才解除。
-- 核心客户端按服务owner复用，读失败不会因换实例丢失阻写状态；重复ID与编辑版本冲突分别提示。
-- 连接/保存后自动刷新网关目录，仍有效聊天选择不清；聊天发送不再关提供商草稿，失败文本保留、新会话显式清上下文、失败user不重复入请求。
-- 异步结果绑定owner和请求代际；停止显示回收中，后台清理完成后才允许启动，不在主线程等待。
+- 所有凭据（提供商 Key、网关 Caller Key）只存于 App 私有目录（受 Android 文件加密保护）；**系统备份关闭**，仅支持 SAF 加密导出（schemaVersion 1，上限 5MB）；
+- 网关仅监听 `127.0.0.1`；管理面 3430 与网关面 3425 凭据严格隔离，Key 不进入状态流/Intent/日志/剪贴板；
+- 崩溃事后审计（`post_mortem.json`）强制经 SecretRedactor 脱敏并截断，绝无凭据落盘；
+- 不申请额外权限：仅 INTERNET / 前台服务 / 通知，无位置/存储/联系人访问。
+
+## 后台限制说明
+
+- 网关以前台服务（`specialUse`）运行，常驻通知可随时停止；用户 Stop/ForceStop 后**不自动保活**；
+- Android 14+ 的电池优化白名单需用户手动授权（App 内一键引导），否则 Doze 可能中断长耗时推理；
+- 网络切换（Wi-Fi ↔ 蜂窝）由 `NetworkConnectivityMonitor` 实时感知并在 UI 呈现；低内存触发 `TRIM_MEMORY_RUNNING_CRITICAL` 告警。
 
 ## 安全边界
 
-继承真实mobile核心M1/M2/M3/M5和核心签发Key。管理3430 Cookie与网关3425 Bearer隔离，Key不进入状态流/Intent/日志/Clipboard；同UID插件不是沙箱。
-受控目录接口POST /api/mobile/providers/models只在私有管理面携草稿，服务商方向严格GET。新增/编辑仍只支持基础custom API-key OpenAI Chat，安全canonical/HMAC revision/严格锁/原子保存/JSONC未知字段保留，不开放任意旧save/test/detect。
+继承真实 mobile 核心 M1/M2/M3/M5 与核心签发 Key。管理 3430 Cookie 与网关 3425 Bearer 隔离；同 UID 插件不是沙箱。移动管理面是**精确方法+路径白名单**（非前缀匹配），每项能力单独审查后开放；新增/编辑只支持基础 custom API-key OpenAI Chat，安全 canonical/HMAC revision/严格锁/原子保存。
 
 ## 验证与操作
 
-Actions执行Python应用器、JVM、Go安全/目录、真实host fake-vendor GET-only烟测，再构建固定54dc257f/Go1.26.8 mobile,nogui AndroidARM64 PIE核心0.1.3188-mobile.4（Android CGO1、外部PIE链接；host测试仍CGO0）和APK，核对载荷SHA256。新增代码/静态检查不算实际测试通过，以最终提交CI报告为准。host模拟目录不等于真实渠道推理通过。
+CI 执行 Python 应用器、JVM 全量测试、Go 安全测试、host fake-vendor GET-only 烟测，再构建固定 v0.1.3622/Go1.26.8 mobile,nogui AndroidARM64 PIE 核心 `0.1.3622-mobile.1`（16KB 页对齐，`-Wl,-z,max-page-size=16384`）与固定签名 APK，核对载荷 SHA-256 与签名证书。安装后核对版本/SHA 并按 [安装指南](docs/upgrade-guide-0.1.30.md) 验证。
 
-安装新独立Release后核对版本/SHA，启动并完成安全连接；新增提供商填URL和必要Key，目录自动出现后选择模型保存。目录401/429/404/超时分别提示，获取失败可重试只读或高级补ID，不用聊天探测。保存后目录自动刷新，不需要人为反复刷新。签名冲突先回报并保留旧应用数据。
-
-[UX审查记录](docs/ux-review-0.1.4.md)区分已修改与仍需真机确认的键盘/小屏/通知/复杂类型场景。
-
-真实API/订阅推理需额外预算授权；多协议/订阅、DataStore/SAF/M4加密备份、完整Sessions/高级路由统计插件、长时后台多系统/16KB和完整许可分发仍按计划推进。
+本地大版本升级基线：v0.1.3622 起步（旧基线 v0.1.3188 的 24 个补丁目标文件零变更，升级流程见技能库与 gap-analysis §5）。
