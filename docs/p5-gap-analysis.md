@@ -18,6 +18,11 @@
 | POST /api/mobile/providers/* | ProviderManagementClient.create/edit/discoverModels() | 已对接（overlay） |
 
 ## 2. 白名单外、可安全落地的只读候选（需 overlay 扩白名单 + Kotlin 客户端 + UI）
+> **2026-11-10 P6 终审更新**：本表前四行已全部落地（heatmap/quotas/quotas-history 与 usage 聚合 → 0.1.27/0.1.29；
+> notices → 0.1.28）。`GET /api/settings` 经源码裁定**不落地**：settingsState 组装分散于 api.go/join.go/gatewaymode.go
+> 等多文件，快照含 LAN key、allowIPs、端口等敏感配置，仅“不渲染”无法缩小响应暴露面。`GET /api/usage/requests/content`
+> 经源码裁定**不落地**：返回 agent 会话文件中的完整对话正文（requestContent），移动端聊天已有本地会话视图，
+> 核心侧正文查看属低价值高风险，避免对话原文二次暴露面。
 
 | 候选 | 上游端点 | 价值 | 安全评估 |
 | :--- | :--- | :--- | :--- |
