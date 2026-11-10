@@ -70,9 +70,19 @@ internal fun UsageInsightsCard(
             if (usageState.insightsError.isNotBlank()) {
                 Text(usageState.insightsError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            val summaryRows = remember(usageState.summaryJson) { InsightParser.summarize(usageState.summaryJson) }
             val heatmapRows = remember(usageState.heatmapJson) { InsightParser.summarize(usageState.heatmapJson) }
             val quotaRows = remember(usageState.quotasJson) { InsightParser.summarize(usageState.quotasJson) }
             val historyRows = remember(usageState.historyJson) { InsightParser.summarize(usageState.historyJson) }
+            if (summaryRows.isNotEmpty()) {
+                Text("聚合概要（今日）", style = MaterialTheme.typography.titleSmall)
+                summaryRows.forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(row.title, style = MaterialTheme.typography.bodySmall)
+                        Text(row.value, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             if (heatmapRows.isNotEmpty()) {
                 Text("热力图概要", style = MaterialTheme.typography.titleSmall)
                 heatmapRows.forEach { row ->

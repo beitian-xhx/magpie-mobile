@@ -21,6 +21,7 @@ data class UsageUiState(
     val heatmapJson: String = "",
     val quotasJson: String = "",
     val historyJson: String = "",
+    val summaryJson: String = "",
     val insightsError: String = "",
 )
 
@@ -34,6 +35,9 @@ class UsageViewModel(
     },
     private val insightsReader: suspend (UsageInsightEndpoint) -> String = { endpoint ->
         withContext(Dispatchers.IO) { NativeCoreSession.managementClient().usageInsight(endpoint) }
+    },
+    private val summaryReader: suspend (String) -> String = { period ->
+        withContext(Dispatchers.IO) { NativeCoreSession.managementClient().usageSummary(period) }
     }
 ) : ViewModel() {
 
@@ -68,7 +72,8 @@ class UsageViewModel(
                 val heatmap = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.HEATMAP) }
                 val quotas = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS) }
                 val history = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS_HISTORY) }
-                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas, historyJson = history) }
+                val summary = withContext(Dispatchers.IO) { summaryReader("today") }
+                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas, historyJson = history, summaryJson = summary) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

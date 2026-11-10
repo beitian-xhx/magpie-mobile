@@ -137,6 +137,10 @@ class UsageViewModelTest {
                     else -> """{"history":[1,2]}"""
                 }
             },
+            summaryReader = { period ->
+                assertEquals("today", period)
+                """{"totals":{"requests":10,"tokens":320},"period":"today"}"""
+            },
         )
         vm.loadInsights()
         withTimeout(10000) { vm.state.first { !it.insightsLoading } }
@@ -144,11 +148,13 @@ class UsageViewModelTest {
         assertEquals("""{"days":[1,2,3]}""", vm.state.value.heatmapJson)
         assertEquals("""{"openai":{"remaining":100}}""", vm.state.value.quotasJson)
         assertEquals("""{"history":[1,2]}""", vm.state.value.historyJson)
+        assertEquals("""{"totals":{"requests":10,"tokens":320},"period":"today"}""", vm.state.value.summaryJson)
         assertEquals("", vm.state.value.insightsError)
 
         val failing = UsageViewModel(
             requestsReader = { emptyList() },
             insightsReader = { throw IllegalStateException("HTTP 503") },
+            summaryReader = { throw IllegalStateException("HTTP 503") },
         )
         failing.loadInsights()
         withTimeout(10000) { failing.state.first { !it.insightsLoading } }

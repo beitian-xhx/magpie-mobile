@@ -70,6 +70,13 @@ class CoreManagementClient(
         return decode { json.decodeFromString(NoticesResponse.serializer(), body).text }
     }
 
+    /** GET /api/usage (upstream 54dc257f usage.go usageState(period, zone)): aggregate usage state. Raw JSON. */
+    fun usageSummary(period: String = ""): String {
+        require(period.isEmpty() || period in setOf("today", "week", "month", "all")) { "period 仅允许 today/week/month/all" }
+        val suffix = if (period.isEmpty()) "" else "?period=" + period
+        return transport.request("GET", "/api/usage" + suffix)
+    }
+
     /** Exactly one add-key POST, sending only name. The core generates 24 bytes (48 hex).
      * access.List() removes every row secret. Associate the top-level secret only with the
      * unique newly added id/name, using the immediately preceding GET id set; never masked.

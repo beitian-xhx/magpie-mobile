@@ -108,6 +108,16 @@ class CoreManagementClientTest {
         assertNull(post.origin)
     }
 
+    @Test fun usageSummarySendsPeriodAndRejectsUnknown() {
+        val body = api.client().usageSummary("today")
+        assertTrue(body.contains(""totals""))
+        val request = api.requests.single { it.path == "/api/usage" }
+        assertEquals("GET", request.method)
+        // 非法 period 在客户端即拒绝，不发请求
+        assertFailsWith<IllegalArgumentException> { api.client().usageSummary("drop table") }
+        assertEquals(1, api.requests.count { it.path.startsWith("/api/usage") && !it.path.contains("requests") })
+    }
+
     @Test fun noticesReturnsLicenseText() {
         val text = api.client().notices()
         assertTrue(text.contains("MIT License"))
@@ -305,6 +315,7 @@ internal class ManagementApiFixture : AutoCloseable {
                     "GET /api/state" -> respond(exchange, 200, """{"anything":{"nested":[1,2,3]},"version":7}""")
                     "GET /api/usage/requests" -> respond(exchange, 200, """{"requests":[{"id":"req-1","model":"gpt-4o","status":200,"duration":150,"total_tokens":42}]}""")
                     "GET /api/notices" -> respond(exchange, 200, """{"text":"Magpie is MIT License. Bundled third-party components: MIT License, Apache-2.0."}""")
+                    "GET /api/usage" -> respond(exchange, 200, """{"totals":{"requests":10,"tokens":320},"period":"today"}""")
                     "GET /api/caller-keys/models" -> respond(exchange, 200, """{"models":[
                         {"id":"group/zero","name":"Zero 组","group":true},
                         {"id":"openai/gpt-4o","name":"GPT-4o","provider":"openai","providerName":"OpenAI"},
