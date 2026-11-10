@@ -2,6 +2,7 @@ package cc.fplj.magpiemobile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cc.fplj.magpiemobile.core.UsageInsightEndpoint
 import cc.fplj.magpiemobile.core.UsageRecord
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

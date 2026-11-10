@@ -13,46 +13,41 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import cc.fplj.magpiemobile.core.UsageInsightEndpoint
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 
-/** 弹性解析结果：上游 schema 未钉死，只提取可安全展示的数字与标签。 */
+/** 弹性解析结果：上游 schema 未钉死，只提取可安全展示的数字与条目计数。 */
 internal data class InsightSummary(val title: String, val value: String)
 
 internal object InsightParser {
-    private val json = Json { ignoreUnknownKeys = true }
-
-    /** 从任意 JSON 形状中提取 (标签, 数值) 对；仅取字符串/长整型字段，深度 2 层以内。 */
+    /** 从任意 JSON 形状中提取 (标签, 数值) 对；仅取长整型字段，对象深度 2 层以内；数组只报条数。 */
     fun summarize(raw: String, maxEntries: Int = 6): List<InsightSummary> {
         if (raw.isBlank()) return emptyList()
-        val element = try { json.parseToJsonElement(raw) } catch (_: Exception) { return emptyList() }
         val out = mutableListOf<InsightSummary>()
-        fun walk(obj: JsonObject, prefix: String) {
-            for ((key, value) in obj) {
-                if (out.size >= maxEntries) return
-                val label = if (prefix.isEmpty()) key else prefix + "." + key
-                when (value) {
-                    is kotlinx.serialization.json.JsonPrimitive -> {
-                        val num = value.jsonPrimitive.longOrNull
-                        if (num != null) out.add(InsightSummary(label, num.toString()))
-                    }
-                    is JsonObject -> if (prefix.count { it == '.' } < 1) walk(value, label)
-                    is JsonArray -> {
-                        // 数组只统计长度，不展开内容（避免泄露条目文本）。
-                        out.add(InsightSummary(label, value.size.toString() + " 条"))
-                    }
-                }
+        try {
+            val trimmed = raw.trim()
+            if (trimmed.startsWith("[")) {
+                out.add(InsightSummary("条目", JSONArray(trimmed).length().toString() + " 条"))
+            } else if (trimmed.startsWith("{")) {
+                walk(JSONObject(trimmed), "", out, maxEntries)
             }
-        }
-        when (val e = element) {
-            is JsonObject -> walk(e, "")
-            is JsonArray -> out.add(InsightSummary("条目", e.size.toString() + " 条"))
+        } catch (_: Exception) {
+            // 非 JSON 或超限：展示为空，绝不呈现原始正文。
         }
         return out
+    }
+
+    private fun walk(obj: JSONObject, prefix: String, out: MutableList<InsightSummary>, maxEntries: Int) {
+        for (key in obj.keys()) {
+            if (out.size >= maxEntries) return
+            val label = if (prefix.isEmpty()) key else prefix + "." + key
+            when (val value = obj.opt(key)) {
+                is Number -> out.add(InsightSummary(label, value.toString()))
+                is JSONObject -> if (prefix.count { it == '.' } < 1) walk(value, label, out, maxEntries)
+                is JSONArray -> out.add(InsightSummary(label, value.length().toString() + " 条"))
+                else -> {} // 字符串/布尔/空值一律不展示（避免泄露文本内容）
+            }
+        }
     }
 }
 
