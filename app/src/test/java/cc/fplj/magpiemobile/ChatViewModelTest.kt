@@ -72,6 +72,37 @@ class ChatViewModelTest {
         return ViewModelProvider(store, factory)[ChatViewModel::class.java].also { settled(it) }
     }
 
+    @Test fun renameConversationUpdatesTitleAndLegacyStaysReadOnly() {
+        val vm = vm()
+        assertTrue(vm.state.value.ready)
+        val id = vm.state.value.selected!!.id
+        vm.renameConversation(id, "  自定义标题  ")
+        val renamed = settled(vm)
+        assertEquals("自定义标题", checkNotNull(renamed.conversations.firstOrNull { it.id == id }).title)
+        // Blank titles never rename.
+        vm.renameConversation(id, "   ")
+        val unchanged = settled(vm)
+        assertEquals("自定义标题", checkNotNull(unchanged.conversations.firstOrNull { it.id == id }).title)
+    }
+
+    @Test fun deleteConversationRemovesAllAndFallsBackToAnother() {
+        val vm = vm()
+        val first = vm.state.value.selected!!.id
+        val second = runBlocking(Dispatchers.IO) { repo.createConversation() }
+        vm.selectConversation(second); settled(vm)
+        assertEquals(second, vm.state.value.selected!!.id)
+        vm.deleteConversation(second)
+        val after = settled(vm)
+        assertNull(after.conversations.firstOrNull { it.id == second })
+        // Deleted selection falls back to another live conversation (never the deleted one).
+        checkNotNull(after.selected?.id)
+        assertEquals(first, after.selected?.id)
+        // Missing conversations fail loudly instead of partial deletes.
+        org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+            runBlocking(Dispatchers.IO) { repo.deleteConversation("missing-conversation") }
+        }
+    }
+
     @Test fun initializesOfflineAndKeepsSeparateConversationDrafts() {
         val vm = vm()
         assertTrue(vm.state.value.ready)

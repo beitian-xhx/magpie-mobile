@@ -112,6 +112,44 @@ class ChatViewModel internal constructor(
     fun newConversation() = changeSelection(null, create = true)
     fun selectConversation(id: String) = changeSelection(id)
 
+    fun renameConversation(id: String, title: String) {
+        val snapshot = mutable.value
+        if (!snapshot.ready || snapshot.busy || snapshot.sending) return
+        if (title.isBlank()) return
+        mutable.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { checkNotNull(repository).renameConversation(id, title) }
+                if (snapshot.selected?.id == id) loadLatest(id) else reloadConversationList()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { mutable.update { it.copy(notice = "会话重命名失败；原标题保留。") } }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
+    }
+
+    fun deleteConversation(id: String) {
+        val snapshot = mutable.value
+        if (!snapshot.ready || snapshot.busy || snapshot.sending) return
+        if (snapshot.selected?.legacy == true && snapshot.selected?.id == id) return
+        mutable.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { checkNotNull(repository).deleteConversation(id) }
+                drafts.remove(id)
+                // Deleted selection falls back to the newest live conversation automatically.
+                loadLatest(if (snapshot.selected?.id == id) null else snapshot.selected?.id)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { mutable.update { it.copy(notice = "会话删除失败；若该会话正在发送，请稍后重试。") } }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
+    }
+
+    private suspend fun reloadConversationList() {
+        val repo = checkNotNull(repository)
+        val list = withContext(Dispatchers.IO) { repo.conversations(limit = 31) }
+        mutable.update { it.copy(conversations = list.take(30), moreConversations = list.size > 30) }
+    }
+
     private fun changeSelection(id: String?, create: Boolean = false) {
         val snapshot = mutable.value
         if (!snapshot.ready || snapshot.busy || snapshot.sending) return

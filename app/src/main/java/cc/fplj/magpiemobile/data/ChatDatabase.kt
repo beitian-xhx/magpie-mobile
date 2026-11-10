@@ -128,6 +128,9 @@ interface ChatDao {
 
     @Query("SELECT * FROM metadata WHERE `key` = :key")
     fun metadata(key: String): ChatMetadataEntity?
+
+    @Query("DELETE FROM conversation WHERE id = :id AND legacy = 0")
+    fun deleteConversationRow(id: String): Int
 }
 
 @Database(

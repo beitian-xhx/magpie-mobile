@@ -63,6 +63,24 @@ class ChatRepository(val database: ChatDatabase) {
 
     fun conversation(id: String): ConversationSummary? = dao.conversation(id)?.summary()
 
+    /** Manual rename of a live conversation; legacy archives stay read-only. */
+    fun renameConversation(id: String, title: String) = transaction {
+        requireWritableConversation(id)
+        val safe = title.trim()
+        require(safe.isNotEmpty()) { "Chat title must not be blank" }
+        require(safe.length <= 120 && safe.none { it.isISOControl() }) { "Invalid chat title" }
+        dao.nameConversation(id, safe, System.currentTimeMillis())
+    }
+
+    /**
+     * Delete one non-legacy conversation with all messages/operations in a single transaction.
+     * A RUNNING turn blocks deletion via FK RESTRICT; the exception surfaces as failure, never a partial delete.
+     */
+    fun deleteConversation(id: String) = transaction {
+        requireWritableConversation(id)
+        check(dao.deleteConversationRow(id) == 1) { "Chat conversation not found" }
+    }
+
     /** Latest page, then earlier id-based pages; each page is in insertion-time order. */
     fun messages(conversationId: String, beforeId: Long? = null, limit: Int = 50): List<StoredChatMessage> {
         require(limit >= 0) { "Invalid pagination" }
