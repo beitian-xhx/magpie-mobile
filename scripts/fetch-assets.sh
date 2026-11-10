@@ -6,9 +6,9 @@ cd "$(dirname "$0")/.."
 DEST=app/src/main/jniLibs/arm64-v8a
 mkdir -p "$DEST" build-tmp
 
-MAGPIE_SHA256=5b0a793cd85ad171e15ecb9782621adcaf43e2e988180d0db32a1542b9c1fc26
+MAGPIE_SHA256=62046ef27af15008363a850c55b234467615980377c7bcfc2ab0decf828fc195
 BUN_ZIP_SHA256=a1c7e2983f1bb65146beb256a4d72449f23042412bc2cf278aa6397ba27e0274
-MAGPIE_URL=https://github.com/yetone/magpie-releases/releases/download/v0.1.3188/magpie-cli-android-arm64
+MAGPIE_URL=https://github.com/yetone/magpie-releases/releases/download/v0.1.3622/magpie-cli-android-arm64
 BUN_URL=https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-aarch64-android.zip
 
 fetch() { # fetch <out> <url>

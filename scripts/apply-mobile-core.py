@@ -13,7 +13,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 
-SOURCE_REVISION = "54dc257f100e2ca82a843b1eea6a24b8006781f5"
+SOURCE_REVISION = "025123431c140a4988efc3d5c44546e8d73d16d3"
 GO_VERSION = "1.26.8"
 DEFAULT_PATCH_ROOT = Path(__file__).resolve().parent.parent / "patches" / "mobile"
 

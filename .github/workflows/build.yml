@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: yetone/magpie
-          ref: 54dc257f100e2ca82a843b1eea6a24b8006781f5
+          ref: 025123431c140a4988efc3d5c44546e8d73d16d3
           path: build-tmp/upstream
           persist-credentials: false
 
@@ -91,7 +91,7 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           set -euo pipefail
-          go build -trimpath -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.4' -o ../magpie-mobile-host .
+          go build -trimpath -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3622-mobile.1' -o ../magpie-mobile-host .
           python3 ../../scripts/smoke-mobile-core.py --exe ../magpie-mobile-host
 
       - name: Build the Android ARM64 mobile core
@@ -107,7 +107,7 @@ jobs:
           test -n "$ndk"
           export CC="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang"
           test -x "$CC"
-          go build -trimpath -buildmode=pie -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3188-mobile.4 -linkmode=external -extldflags=-Wl,-z,max-page-size=16384' -o ../magpie-mobile-android-arm64 .
+          go build -trimpath -buildmode=pie -tags nogui,mobile -ldflags '-s -w -X main.version=0.1.3622-mobile.1 -linkmode=external -extldflags=-Wl,-z,max-page-size=16384' -o ../magpie-mobile-android-arm64 .
           cp ../magpie-mobile-android-arm64 ../../app/src/main/jniLibs/arm64-v8a/libmagpie_exec.so
           sha256sum ../magpie-mobile-android-arm64 > ../mobile-core.sha256
           go version -m ../magpie-mobile-android-arm64 > ../mobile-core-build-info.txt
@@ -177,7 +177,7 @@ jobs:
           apk_name="magpie-mobile-${version_name}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$apk_name"
           sha256sum "$apk_name" | tee "${apk_name}.sha256"
-          printf 'Commit: %s\nSource: 54dc257f100e2ca82a843b1eea6a24b8006781f5\nCore: 0.1.3188-mobile.4 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
+          printf 'Commit: %s\nSource: 025123431c140a4988efc3d5c44546e8d73d16d3\nCore: 0.1.3622-mobile.1 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
           cat build-tmp/mobile-core.sha256 build-tmp/apk-signature.txt >> build-info.txt
           notes_file="build-tmp/release-notes.md"
           if [ -f "RELEASE_NOTES.md" ]; then

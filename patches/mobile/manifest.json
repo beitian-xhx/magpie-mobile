@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "sourceRevision": "54dc257f100e2ca82a843b1eea6a24b8006781f5",
+  "sourceRevision": "025123431c140a4988efc3d5c44546e8d73d16d3",
   "goVersion": "1.26.8",
   "checks": [
     {
       "path": "go.mod",
-      "sha256": "ceee19c55b785efed15d4e68ad3fae4159d42defc28779a3193f8146f79fba57"
+      "sha256": "5dd5f60b0f8f0d5292f8d2e6d404f003c098d8b73289af9895bcd7092ccf9d0c"
     }
   ],
   "patches": [
     {
       "path": "internal/gateway/gateway.go",
-      "sha256": "9b710125fe0bd0450dc46c222addb3d3b75fc0b404caf951801d3f52984ae553",
+      "sha256": "db5fd88e6f2c2a90ecde5040817f66090a14f64518f4fa96cdda2559b7693680",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/settings\"\n",
@@ -26,7 +26,7 @@
           "new": "\tmux.HandleFunc(\"POST \"+RestartPath, s.restartToUpdate)\n\t}\n"
         }
       ],
-      "resultSha256": "e9cd060f86bf463cf14a44c315b43380069d784ede6df89e58fa84f48fc0e975"
+      "resultSha256": "f21f4be854f8de19888c00ab8ec51362c017e518aa6751a535f3d0214bcfa13e"
     },
     {
       "path": "internal/gateway/goroutines.go",
@@ -45,7 +45,7 @@
     },
     {
       "path": "internal/gateway/lan.go",
-      "sha256": "296b03da2ac95eb9a276c2371987e514870e40b4f1041528a288a41aa4d74353",
+      "sha256": "39f45eccf452ec06f377b52f82e323e78df6bf14bc2e70e20c098cf2d03db51d",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/settings\"\n",
@@ -60,8 +60,8 @@
           "new": "\t\tif !mobilepolicy.Enabled && remote && corsPreflight(r) && corsAllowed(r.Header.Get(\"Origin\")) {\n"
         },
         {
-          "old": "\t\tif remote && keyPageOpen(r) {\n",
-          "new": "\t\tif !mobilepolicy.Enabled && remote && keyPageOpen(r) {\n"
+          "old": "\t\tif remote && (keyPageOpen(r) || caFileOpen(r)) {\n",
+          "new": "\t\tif !mobilepolicy.Enabled && remote && (keyPageOpen(r) || caFileOpen(r)) {\n"
         },
         {
           "old": "\t\tif remote && imageTokenAsked(r) {\n",
@@ -96,11 +96,11 @@
           "new": "\tif ok {\n\t\tr = r.WithContext(access.WithIdentity(r.Context(), who))\n\t\tif mobilepolicy.Enabled {\n\t\t\tr = r.WithContext(context.WithValue(r.Context(), mobileAuthenticated{}, true))\n\t\t}\n\t}\n"
         }
       ],
-      "resultSha256": "e80ee6c22ba5f32d267f7006702b1bd5a8dd3567bad35e4628364661b2aec30e"
+      "resultSha256": "22439a3d977fb2db0d84b19c8c8fcddbc38f56ba468abd3ca52aaf7a9e4ed2d4"
     },
     {
       "path": "internal/gui/web.go",
-      "sha256": "612e1de439a961bb54d08c1f422a272b069ff7bb18975052d820262e05a3191c",
+      "sha256": "11998be9b45d94f6782c57661f3faab2c26153c65f729c4ede087943828782d1",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/plugin\"\n",
@@ -123,22 +123,22 @@
           "new": "func webKey() (key string, fixed bool, err error) {\n\tif mobilepolicy.Enabled {\n\t\tk := os.Getenv(\"MAGPIE_WEB_KEY\")\n\t\tos.Unsetenv(\"MAGPIE_WEB_KEY\")\n\t\tos.Unsetenv(webRunKey)\n\t\tif k == \"\" {\n\t\t\treturn \"\", false, errors.New(\"mobile requires App-injected MAGPIE_WEB_KEY\")\n\t\t}\n\t\tif err := CheckWebKey(k); err != nil {\n\t\t\treturn \"\", false, err\n\t\t}\n\t\treturn k, false, nil // process-only; no persistent credential cookie\n\t}\n"
         }
       ],
-      "resultSha256": "b6d309cff88ef355991a2527cb8857fd633668cb027a8910e85f68480238e686"
+      "resultSha256": "08e45b57548a062bb69c690274e469270fddf647312bdfde7a71d32b5a29dbe0"
     },
     {
       "path": "internal/gui/api.go",
-      "sha256": "fd5d4078f2d62ae6f54bb932310f09f961fba58d9aa2cd6a45350c0b6c1cd7e6",
+      "sha256": "967785564d039c288af2f2ad6b5128eae1127946cea286d26f24b48bcb11d7e6",
       "replacements": [
         {
           "old": "\treturn noFramedAPI(held(mux))\n",
           "new": "\treturn mobileAPI(noFramedAPI(held(mux)))\n"
         }
       ],
-      "resultSha256": "067643006577ac70c746129531bd3ea82d91c74ca5de05dc704e93ea58d92520"
+      "resultSha256": "834dc0b1c5288c46ffa3cd0f9a0da437d141f214992249ccf38677ed003b01f3"
     },
     {
       "path": "internal/gui/update.go",
-      "sha256": "e2bdb203811aea8566d83131650d61839f939ea70642bf517f760705129a86c5",
+      "sha256": "e53156f2082c33bac2d29877fa49374228f3ca16bcbc2c2b5a082b36f4b4ff31",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/settings\"\n",
@@ -149,7 +149,7 @@
           "new": "func (u *updater) start() {\n\tif mobilepolicy.Enabled {\n\t\treturn // APK owns native updates; do not place, spawn or register restarter\n\t}\n"
         }
       ],
-      "resultSha256": "7524072197511a1c802c18bc50d0858843f99a67e649d8bb24eb6c1dafbf5b9c"
+      "resultSha256": "e156f552d64d1a0f75593e0da822d52914aa913142fb32316e8482132d89cc11"
     },
     {
       "path": "internal/cli/web_cli.go",
@@ -168,7 +168,7 @@
     },
     {
       "path": "internal/provider/provider.go",
-      "sha256": "41be0361f892829600d960cfce84bf03b297e9f64a9a305a4a84e93687974fc5",
+      "sha256": "bacba933799c4afc76b68dd5cf171740bf9e704632efd50d8cb20b6a55ec0b71",
       "replacements": [
         {
           "old": "type file struct {\n",
@@ -199,7 +199,7 @@
           "new": "func store(f file) error {\n\tif handled, err := mobileStore(f); handled { return err }\n"
         }
       ],
-      "resultSha256": "37eb93888030be2076b762bb41ffe038c244ae53e953f91a7ba303f7fcddc8d7"
+      "resultSha256": "be4fd6ee576d90e0e73a0e94ed4354986ccc1ec7627d888a261eda8960650c3c"
     }
   ],
   "overlays": [
