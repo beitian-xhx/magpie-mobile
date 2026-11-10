@@ -15,7 +15,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,11 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ChatPanel(
@@ -105,50 +100,5 @@ fun ChatPanel(
             if (state.notice.isNotBlank()) Text(state.notice, style = MaterialTheme.typography.bodySmall)
         }
     }
-    if (historyOpen) Dialog(onDismissRequest = { historyOpen = false }) {
-        Surface(shape = MaterialTheme.shapes.large) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("历史会话（本机）", style = MaterialTheme.typography.titleMedium)
-                var editingId by remember { mutableStateOf<String?>(null) }
-                var editTitle by remember { mutableStateOf("") }
-                LazyColumn(Modifier.fillMaxWidth().height(360.dp)) {
-                    items(state.conversations, key = { it.id }) { conversation ->
-                        val isEditing = editingId == conversation.id && !conversation.legacy
-                        if (isEditing) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(value = editTitle, onValueChange = { editTitle = it.take(120) },
-                                    enabled = idle, modifier = Modifier.weight(1f), label = { Text("会话标题") })
-                                TextButton(enabled = idle && editTitle.isNotBlank(), onClick = {
-                                    viewModel.renameConversation(conversation.id, editTitle)
-                                    editingId = null
-                                }) { Text("保存") }
-                                TextButton(enabled = idle, onClick = { editingId = null }) { Text("取消") }
-                            }
-                        } else {
-                            Column(Modifier.fillMaxWidth()) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(enabled = idle, onClick = { viewModel.selectConversation(conversation.id); historyOpen = false }, modifier = Modifier.weight(1f)) {
-                                        Column(Modifier.fillMaxWidth()) {
-                                            Text(conversation.title + if (conversation.legacy) " · 只读存档" else "")
-                                            Text(chatDate(conversation.updatedAt) + " · " + conversation.id.take(8), style = MaterialTheme.typography.bodySmall)
-                                        }
-                                    }
-                                    if (!conversation.legacy) {
-                                        TextButton(enabled = idle, onClick = { editingId = conversation.id; editTitle = conversation.title }) { Text("重命名") }
-                                        TextButton(enabled = idle, onClick = { viewModel.deleteConversation(conversation.id) }) { Text("删除") }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (state.moreConversations) item {
-                        TextButton(enabled = idle, onClick = viewModel::moreConversations) { Text("加载更多会话") }
-                    }
-                }
-                TextButton(onClick = { historyOpen = false }) { Text("关闭") }
-            }
-        }
-    }
+    if (historyOpen) SessionHistoryDialog(state = state, idle = idle, onDismiss = { historyOpen = false }, viewModel = viewModel)
 }
-
-private fun chatDate(ts: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ts))

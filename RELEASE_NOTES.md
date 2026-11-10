@@ -1,9 +1,6 @@
-## Magpie-Mobile 0.1.30-upstream-3622 (P7 上游核心升级)
+## Magpie-Mobile 0.1.31-session-dialog-split (P7 结构优化延续)
 
-### 核心升级（v0.1.3188 → v0.1.3622）
-- **上游核心整体升级**：595 commits / 300 files（桌面 Agent/CLI 域为主），移动补丁冲突面经 compare 分析确认为零后执行；
-- **补丁重钉**：`patches/mobile/manifest.json` 全量重算——sourceRevision → `02512343`，checks/patches 哈希按新源重算，resultSha256 本地重放 replacements 重算；
-- **唯一语义适配**：lan.go 的 keyPageOpen 分支在新版扩展为 `(keyPageOpen(r) || caFileOpen(r))`，移动策略替换同步适配（`!mobilepolicy.Enabled` 前缀保持语义不变）；
-- **Bun 运行时不变**：bun-v1.4.2 独立于 magpie 版本，插件兼容性延续；
-- **Go 工具链不变**：上游 go directive 仍为 1.26.8；
-- 全部契约检查（apply 模拟 19/19、Room v1、FGS manifest、16KB、隐私审计）本地通过后经 CI 全量回归验证。
+### 结构优化（零行为变更）
+- **ChatPanel 瘦身**：历史会话对话框（切换/重命名/删除/加载更多，约 90 行）外迁至 SessionHistoryDialog.kt，ChatPanel 由 154 行降至约 105 行；
+- `chatDate` 工具函数随迁（internal，同包共用，ChatPanel 保留调用）；
+- 纯代码移动：括号平衡、import 去重、调用点与定义分离核验通过，行为零变更。
