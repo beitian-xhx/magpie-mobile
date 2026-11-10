@@ -3,12 +3,15 @@ package cc.fplj.magpiemobile
 import cc.fplj.magpiemobile.core.UsageRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -122,7 +125,7 @@ class UsageViewModelTest {
     }
 
     @Test
-    fun loadInsightsStoresRawJsonAndRecoversFromError() = runTest(UnconfinedTestDispatcher()) {
+    fun loadInsightsStoresRawJsonAndRecoversFromError() = runBlocking {
         val calls = AtomicInteger()
         val vm = UsageViewModel(
             requestsReader = { emptyList() },
@@ -133,7 +136,7 @@ class UsageViewModelTest {
             },
         )
         vm.loadInsights()
-        advanceUntilIdle()
+        withTimeout(10000) { vm.state.first { !it.insightsLoading } }
         assertEquals(2, calls.get())
         assertEquals("""{"days":[1,2,3]}""", vm.state.value.heatmapJson)
         assertEquals("""{"openai":{"remaining":100}}""", vm.state.value.quotasJson)
@@ -144,7 +147,7 @@ class UsageViewModelTest {
             insightsReader = { throw IllegalStateException("HTTP 503") },
         )
         failing.loadInsights()
-        advanceUntilIdle()
+        withTimeout(10000) { failing.state.first { !it.insightsLoading } }
         assertFalse(failing.state.value.insightsLoading)
         assertTrue(failing.state.value.insightsError.contains("503"))
         // 主请求状态不受洞察失败影响。
