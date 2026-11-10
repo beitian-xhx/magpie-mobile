@@ -131,15 +131,19 @@ class UsageViewModelTest {
             requestsReader = { emptyList() },
             insightsReader = { endpoint ->
                 calls.incrementAndGet()
-                if (endpoint == cc.fplj.magpiemobile.core.UsageInsightEndpoint.HEATMAP) """{"days":[1,2,3]}"""
-                else """{"openai":{"remaining":100}}"""
+                when (endpoint) {
+                    cc.fplj.magpiemobile.core.UsageInsightEndpoint.HEATMAP -> """{"days":[1,2,3]}"""
+                    cc.fplj.magpiemobile.core.UsageInsightEndpoint.QUOTAS -> """{"openai":{"remaining":100}}"""
+                    else -> """{"history":[1,2]}"""
+                }
             },
         )
         vm.loadInsights()
         withTimeout(10000) { vm.state.first { !it.insightsLoading } }
-        assertEquals(2, calls.get())
+        assertEquals(3, calls.get())
         assertEquals("""{"days":[1,2,3]}""", vm.state.value.heatmapJson)
         assertEquals("""{"openai":{"remaining":100}}""", vm.state.value.quotasJson)
+        assertEquals("""{"history":[1,2]}""", vm.state.value.historyJson)
         assertEquals("", vm.state.value.insightsError)
 
         val failing = UsageViewModel(

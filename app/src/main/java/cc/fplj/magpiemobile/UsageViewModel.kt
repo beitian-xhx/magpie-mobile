@@ -20,6 +20,7 @@ data class UsageUiState(
     /** 原始洞察 JSON；上游 schema 未钉死，UI 侧弹性解析展示。 */
     val heatmapJson: String = "",
     val quotasJson: String = "",
+    val historyJson: String = "",
     val insightsError: String = "",
 )
 
@@ -58,7 +59,7 @@ class UsageViewModel(
         mutable.update { UsageUiState() }
     }
 
-    /** 拉取用量洞察（热力图 + 额度配额）；只读端点，失败不阻塞主状态。 */
+    /** 拉取用量洞察（热力图 + 额度配额 + 额度历史）；只读端点，失败不阻塞主状态。 */
     fun loadInsights() {
         if (mutable.value.insightsLoading) return
         mutable.update { it.copy(insightsLoading = true, insightsError = "") }
@@ -66,7 +67,8 @@ class UsageViewModel(
             try {
                 val heatmap = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.HEATMAP) }
                 val quotas = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS) }
-                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas) }
+                val history = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS_HISTORY) }
+                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas, historyJson = history) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

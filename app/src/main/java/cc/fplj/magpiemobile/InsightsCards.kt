@@ -72,6 +72,7 @@ internal fun UsageInsightsCard(
             }
             val heatmapRows = remember(usageState.heatmapJson) { InsightParser.summarize(usageState.heatmapJson) }
             val quotaRows = remember(usageState.quotasJson) { InsightParser.summarize(usageState.quotasJson) }
+            val historyRows = remember(usageState.historyJson) { InsightParser.summarize(usageState.historyJson) }
             if (heatmapRows.isNotEmpty()) {
                 Text("热力图概要", style = MaterialTheme.typography.titleSmall)
                 heatmapRows.forEach { row ->
@@ -84,6 +85,15 @@ internal fun UsageInsightsCard(
             if (quotaRows.isNotEmpty()) {
                 Text("额度概要", style = MaterialTheme.typography.titleSmall)
                 quotaRows.forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(row.title, style = MaterialTheme.typography.bodySmall)
+                        Text(row.value, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            if (historyRows.isNotEmpty()) {
+                Text("额度历史概要", style = MaterialTheme.typography.titleSmall)
+                historyRows.forEach { row ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(row.title, style = MaterialTheme.typography.bodySmall)
                         Text(row.value, style = MaterialTheme.typography.bodySmall)
