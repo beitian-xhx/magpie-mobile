@@ -4,6 +4,7 @@ import cc.fplj.magpiemobile.core.UsageRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -121,7 +122,7 @@ class UsageViewModelTest {
     }
 
     @Test
-    fun loadInsightsStoresRawJsonAndRecoversFromError() = runTest(testDispatcher) {
+    fun loadInsightsStoresRawJsonAndRecoversFromError() = runTest(UnconfinedTestDispatcher()) {
         val calls = AtomicInteger()
         val vm = UsageViewModel(
             requestsReader = { emptyList() },
