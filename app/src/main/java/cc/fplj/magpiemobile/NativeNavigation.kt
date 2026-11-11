@@ -117,9 +117,7 @@ fun Dashboard(
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (shell.page) {
                     AppPage.GATEWAY -> {
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(if (stopping) "正在停止并回收进程…" else gatewayLabel(gateway.phase), style = MaterialTheme.typography.titleMedium)
+                        SectionCard(title = if (stopping) "正在停止并回收进程…" else gatewayLabel(gateway.phase)) {
                                 Text(gateway.message, style = MaterialTheme.typography.bodySmall)
                                 if (notificationNotice.isNotEmpty()) {
                                     Text(notificationNotice, style = MaterialTheme.typography.bodySmall)
@@ -136,16 +134,12 @@ fun Dashboard(
                                 }, style = MaterialTheme.typography.bodySmall)
                                 Text("启停意图仅是本机记录，不是自动启动许可。", style = MaterialTheme.typography.bodySmall)
                                 if (shell.preferences.warning != null) Text(shell.preferences.warning!!, style = MaterialTheme.typography.bodySmall)
-                            }
                         }
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("核心安全连接", style = MaterialTheme.typography.titleMedium)
+                        SectionCard(title = "核心安全连接") {
                                 Text(connection.message, style = MaterialTheme.typography.bodySmall)
                                 if (running && !connection.ready && connection.phase != NativeCoreSession.Phase.CONNECTING)
                                     Button(onClick = onRetryCoreConnection) { Text("重新核对连接与核心密钥") }
                                 Text("管理凭据仅留在进程内；客户端密钥由核心签发并私有保存。连接成功不代表已配置渠道。", style = MaterialTheme.typography.bodySmall)
-                            }
                         }
                         GatewayEndpointCard(
                             running = running && !stopping,
@@ -218,9 +212,7 @@ fun Dashboard(
                     AppPage.MORE -> {
                         val noticesViewModel: NoticesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                         val noticesState by noticesViewModel.state.collectAsStateWithLifecycle()
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("本机界面偏好", style = MaterialTheme.typography.titleMedium)
+                        SectionCard(title = "本机界面偏好") {
                                 Text("主题、最近页面和模型标识保存于 App 私有 DataStore；不另存提供商配置、密钥或聊天正文。", style = MaterialTheme.typography.bodySmall)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     ThemeMode.entries.forEach { theme ->
@@ -233,11 +225,8 @@ fun Dashboard(
                                 shell.preferences.warning?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                                 if (shell.saveNotice.isNotEmpty()) Text(shell.saveNotice, style = MaterialTheme.typography.bodySmall)
                                 TextButton(onClick = appShell::retryPreferences) { Text("重新读取本机偏好") }
-                            }
                         }
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("版本与诊断", style = MaterialTheme.typography.titleMedium)
+                        SectionCard(title = "版本与诊断") {
                                 Text("版本 " + BuildConfig.VERSION_NAME + " · " + BuildConfig.GIT_SHA, style = MaterialTheme.typography.bodySmall)
                                 val startupMetrics = cc.fplj.magpiemobile.core.StartupBenchmark.getMetrics()
                                 if (startupMetrics.totalToReadyMs >= 0) {
@@ -283,21 +272,14 @@ fun Dashboard(
                                     }
                                 }) { Text(if (diagnosing) "诊断中…" else "一键诊断（两引擎版本）") }
                                 if (diagnostic.isNotEmpty()) Text(diagnostic, style = MaterialTheme.typography.bodySmall)
-                            }
                         }
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("引擎状态与脱敏输出", style = MaterialTheme.typography.titleMedium)
+                        SectionCard(title = "引擎状态与脱敏输出") {
                                 Text(gateway.phase.name + "\n" + gateway.message, style = MaterialTheme.typography.bodySmall)
                                 if (gateway.outputTail.isNotEmpty()) Text(gateway.outputTail, style = MaterialTheme.typography.bodySmall)
-                            }
                         }
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("配置安全备份与恢复（SAF · M4）", style = MaterialTheme.typography.titleMedium)
+                        SectionCard(title = "配置安全备份与恢复（SAF · M4）") {
                                 Text("支持经系统存储访问框架（SAF）导入导出脱敏配置。零密钥外泄、纯流式传输、SHA-256 完整性防篡改、拒绝任意文件路径及非安全协议。", style = MaterialTheme.typography.bodySmall)
                                 Text("格式版本：schemaVersion 1 · 安全上限：5MB", style = MaterialTheme.typography.labelSmall)
-                            }
                         }
                         Text("订阅、高级路由、统计和资源库仍按批准计划推进；这些入口尚未交付，不以灰色按钮充当完成。", style = MaterialTheme.typography.bodySmall)
                         LicenseNoticesCard(

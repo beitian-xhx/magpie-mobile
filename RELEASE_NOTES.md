@@ -1,3 +1,10 @@
+## Magpie-Mobile 0.1.33-structure-uikit (P8 结构优化第三阶段)
+
+### 结构优化（零行为变更）
+- **SectionCard 原语抽取**：新增 UiBits.kt 共享 UI 组件，统一「卡片 + 12dp 内距 + 8dp 纵向间距 + 标题」骨架；
+- NativeNavigation 六处手写 Card{Column{…}} 内联卡（网关状态/核心安全连接/本机界面偏好/版本与诊断/引擎状态/安全备份）全部替换为 SectionCard；
+- 效果：NativeNavigation 326→308 行，卡片布局令牌单点维护（与 Anthropic 主题的卡片规范一致），括号平衡核验通过，行为零变更。
+
 ## Magpie-Mobile 0.1.32-anthropic-theme (P8 UI 风格重塑)
 
 ### Anthropic 风格主题（anthropic-style-frontend-cn 技能 · Compose 适配 · 工具优先模式）
