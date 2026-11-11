@@ -26,7 +26,7 @@
           "new": "\tmux.HandleFunc(\"POST \"+RestartPath, s.restartToUpdate)\n\t}\n"
         }
       ],
-      "resultSha256": "f21f4be854f8de19888c00ab8ec51362c017e518aa6751a535f3d0214bcfa13e"
+      "resultSha256": "839a82feada5537588273848939226ec8608ff5fd95c1e1840d2bc91728b7cdc"
     },
     {
       "path": "internal/gateway/goroutines.go",
@@ -96,7 +96,7 @@
           "new": "\tif ok {\n\t\tr = r.WithContext(access.WithIdentity(r.Context(), who))\n\t\t// the names the key gives models, before any route reads one\n\t\tr = aliasRequest(r, who)\n\t\tif mobilepolicy.Enabled {\n\t\t\tr = r.WithContext(context.WithValue(r.Context(), mobileAuthenticated{}, true))\n\t\t}\n\t}\n"
         }
       ],
-      "resultSha256": "22439a3d977fb2db0d84b19c8c8fcddbc38f56ba468abd3ca52aaf7a9e4ed2d4"
+      "resultSha256": "83c943e38651e88ff6f2e2ee239dcdb5da2a8a71314248b892caf0fd440d0924"
     },
     {
       "path": "internal/gui/web.go",
@@ -123,7 +123,7 @@
           "new": "func webKey() (key string, fixed bool, err error) {\n\tif mobilepolicy.Enabled {\n\t\tk := os.Getenv(\"MAGPIE_WEB_KEY\")\n\t\tos.Unsetenv(\"MAGPIE_WEB_KEY\")\n\t\tos.Unsetenv(webRunKey)\n\t\tif k == \"\" {\n\t\t\treturn \"\", false, errors.New(\"mobile requires App-injected MAGPIE_WEB_KEY\")\n\t\t}\n\t\tif err := CheckWebKey(k); err != nil {\n\t\t\treturn \"\", false, err\n\t\t}\n\t\treturn k, false, nil // process-only; no persistent credential cookie\n\t}\n"
         }
       ],
-      "resultSha256": "08e45b57548a062bb69c690274e469270fddf647312bdfde7a71d32b5a29dbe0"
+      "resultSha256": "f6cb89a8ad30eac5183c34b5895a68ef33b2983bf51862b89b78a2145c3c4265"
     },
     {
       "path": "internal/gui/api.go",
@@ -134,7 +134,7 @@
           "new": "\treturn mobileAPI(noFramedAPI(held(mux)))\n"
         }
       ],
-      "resultSha256": "834dc0b1c5288c46ffa3cd0f9a0da437d141f214992249ccf38677ed003b01f3"
+      "resultSha256": "df33e3941c9ea0f001a389c551f17d655502bcef6ed75ba35238a56ffe24fed5"
     },
     {
       "path": "internal/gui/update.go",
@@ -149,7 +149,7 @@
           "new": "func (u *updater) start() {\n\tif mobilepolicy.Enabled {\n\t\treturn // APK owns native updates; do not place, spawn or register restarter\n\t}\n"
         }
       ],
-      "resultSha256": "e156f552d64d1a0f75593e0da822d52914aa913142fb32316e8482132d89cc11"
+      "resultSha256": "bb1d930dadafe1190eebd489aa1140a842f8f82818055da666329a6ee22ab5c1"
     },
     {
       "path": "internal/cli/web_cli.go",
@@ -164,7 +164,7 @@
           "new": "func printWeb(w *gui.Web) {\n\tif mobilepolicy.Enabled {\n\t\tfmt.Println(\"magpie mobile private management on\", w.Addr)\n\t\tfmt.Println(\"  App-managed credentials only; no key-bearing link is printed. Gateway requests require a valid key.\")\n\t\treturn\n\t}\n"
         }
       ],
-      "resultSha256": "ea9c40898e94e3ccaee9ca51a412fd3d1404e00dc4a2502183d01453b9dbaa86"
+      "resultSha256": "5b714c4cef55b67bcdca8524c074e8668056e038c8dbe83ac72bee651cfa10e1"
     },
     {
       "path": "internal/provider/provider.go",
@@ -199,7 +199,7 @@
           "new": "func store(f file) error {\n\tif handled, err := mobileStore(f); handled { return err }\n"
         }
       ],
-      "resultSha256": "be4fd6ee576d90e0e73a0e94ed4354986ccc1ec7627d888a261eda8960650c3c"
+      "resultSha256": "b621f635e0ab6198aae2d80b6e600f2b7fa387ae688e66b6e5a6e109fcb75615"
     }
   ],
   "overlays": [
