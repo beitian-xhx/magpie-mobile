@@ -231,7 +231,9 @@ class ProviderManagementClient(
         if (noModels && models.isNotEmpty()) throw ManagementProtocolException()
         val key = parseKey(row["key"], strict = true)
         if (key.optional) throw ManagementProtocolException()
-        return ProviderEditSnapshot(id, revision, name, chat, immutable(models), noModels, key)
+        val serverPin = providerServerPin(row.string("serverPin"))
+        if (redactor.sensitive(serverPin)) throw ManagementProtocolException()
+        return ProviderEditSnapshot(id, revision, name, chat, immutable(models), noModels, key, serverPin)
     }
 
     private fun parseKey(element: JsonElement?, strict: Boolean): ProviderKeyMetadata {
@@ -283,6 +285,7 @@ data class ProviderListSnapshot(val providers: List<ProviderSummary> = emptyList
 class ProviderEditSnapshot internal constructor(
     val id: String, val revision: String, val name: String, val chatUrl: String,
     val modelIds: List<String>, val noModels: Boolean, val key: ProviderKeyMetadata,
+    val serverPin: String = "",
 ) {
     val chat: String get() = chatUrl
     val keySet: Boolean get() = key.known && key.set

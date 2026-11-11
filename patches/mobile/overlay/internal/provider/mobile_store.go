@@ -67,6 +67,7 @@ type MobileProviderSnapshot struct {
 	Models []string `json:"models"`
 	NoModels bool `json:"noModels"`
 	Key MobileProviderKey `json:"key"`
+	ServerPin string `json:"serverPin,omitempty"`
 }
 
 type MobileProviderCreate struct {
@@ -77,6 +78,7 @@ type MobileProviderCreate struct {
 	Key string `json:"key"`
 	Models []string `json:"models"`
 	NoModels bool `json:"noModels"`
+	ServerPin string `json:"serverPin,omitempty"`
 }
 
 type MobileProviderEdit struct {
@@ -87,6 +89,7 @@ type MobileProviderEdit struct {
 	Key *string `json:"key,omitempty"`
 	Models *[]string `json:"models,omitempty"`
 	NoModels *bool `json:"noModels,omitempty"`
+	ServerPin *string `json:"serverPin,omitempty"`
 }
 
 func mobileText(s string, max int) (string, error) {
@@ -98,6 +101,17 @@ func mobileText(s string, max int) (string, error) {
 		if unicode.IsControl(c) {
 			return "", ErrMobileProviderInvalid
 		}
+	}
+	return s, nil
+}
+
+func mobileServerPin(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	if len(s) != 64 || strings.Trim(s, "0123456789abcdef") != "" {
+		return "", ErrMobileProviderInvalid
 	}
 	return s, nil
 }
@@ -240,7 +254,7 @@ func mobileSnapshot(p Provider, raw []byte) (MobileProviderSnapshot, error) {
 	if p.Key != "" {
 		masked = "••••••••" // not even a short key can be returned in full
 	}
-	return MobileProviderSnapshot{p.ID, hex.EncodeToString(h.Sum(nil)), p.Name, p.Chat, append([]string{}, p.Models...), p.NoModels, MobileProviderKey{p.Key != "", masked, false}}, nil
+	return MobileProviderSnapshot{p.ID, hex.EncodeToString(h.Sum(nil)), p.Name, p.Chat, append([]string{}, p.Models...), p.NoModels, MobileProviderKey{p.Key != "", masked, false}, p.ServerPin}, nil
 }
 
 func MobileEditableProvider(id string) (out MobileProviderSnapshot, err error) {
@@ -267,7 +281,8 @@ func MobileCreateProvider(in MobileProviderCreate) (out MobileProviderSnapshot, 
 	chat, e := mobileChat(in.Chat); if e != nil { return out, e }
 	key, e := mobileKey(in.Key); if e != nil { return out, e }
 	models, e := mobileModels(in.Models); if e != nil || in.NoModels != (len(models) == 0) { return out, ErrMobileProviderInvalid }
-	p := Provider{ID: in.ID, Name: name, Chat: chat, Key: key, Models: models, NoModels: in.NoModels, BaseAPI: "chat"}
+	pin, e := mobileServerPin(in.ServerPin); if e != nil { return out, e }
+	p := Provider{ID: in.ID, Name: name, Chat: chat, Key: key, Models: models, NoModels: in.NoModels, BaseAPI: "chat", ServerPin: pin}
 	err = mobileTransaction(func() error {
 		raw, f, e := mobileCanonical(); if e != nil { return e }
 		if slices.ContainsFunc(f.Providers, func(q Provider) bool { return q.ID == p.ID }) { return ErrMobileProviderExists }
@@ -297,6 +312,7 @@ func MobileEditProvider(in MobileProviderEdit) (out MobileProviderSnapshot, err 
 		var fields []edit.KV
 		if in.Name != nil { p.Name, e = mobileText(*in.Name, 120); if e != nil { return e }; fields = append(fields, edit.KV{Path: "name", Value: p.Name}) }
 		if in.Chat != nil { p.Chat, e = mobileChat(*in.Chat); if e != nil { return e }; fields = append(fields, edit.KV{Path: "chat", Value: p.Chat}) }
+		if in.ServerPin != nil { pin, e := mobileServerPin(*in.ServerPin); if e != nil { return e }; p.ServerPin = pin; fields = append(fields, edit.KV{Path: "serverPin", Value: pin}) }
 		if in.Key != nil && strings.TrimSpace(*in.Key) != "" { p.Key, e = mobileKey(*in.Key); if e != nil { return e }; fields = append(fields, edit.KV{Path: "key", Value: p.Key}) }
 		if in.Models != nil {
 			p.Models, e = mobileModels(*in.Models); if e != nil { return e }

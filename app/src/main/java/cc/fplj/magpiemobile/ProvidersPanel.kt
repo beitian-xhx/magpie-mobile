@@ -70,6 +70,7 @@ fun ProvidersPanel(
     var recoveryRequired by rememberSaveable { mutableStateOf(false) }
     var pendingProviderId by rememberSaveable { mutableStateOf("") }
     var confirmDisable by remember { mutableStateOf(false) }
+    var serverPin by remember { mutableStateOf("") }
     val owner = if (enabled) NativeCoreSession.providerSessionId() else null
 
     // 导航守卫：busy、open (编辑Dialog打开) 或 recoveryRequired 时均锁住外层 Tab 切换
@@ -114,7 +115,7 @@ fun ProvidersPanel(
     fun close() { key = ""; showKey = false; open = false; confirmDisable = false }
     fun newProvider(presetId: String = "", presetName: String = "", url: String = "") {
         if (!listHealthy || recoveryRequired || busy || operationBusy) return
-        snapshot = null; id = presetId; name = presetName; baseUrl = url; key = ""
+        snapshot = null; id = presetId; name = presetName; baseUrl = url; key = ""; serverPin = ""
         idTouched = false; nameTouched = false; localHttp = false; advanced = false; manual = false
         selected = emptyList(); modelOptions = emptyList(); policy = ProviderEditorPolicy(true)
         discoveryDone = false; discoveryError = ""; message = ""; manualText = ""; open = true
@@ -165,14 +166,14 @@ fun ProvidersPanel(
         if (busy || operationBusy || recoveryRequired || !listHealthy || !enabled || owner == null) return
         val session = owner; val sequence = ++operationSequence
         val initial = snapshot; val inputKey = key; val inputName = name; val inputId = id
-        val inputUrl = baseUrl; val inputModels = selected; val editedModels = policy.editedModels(); val allow = localHttp
+        val inputUrl = baseUrl; val inputModels = selected; val editedModels = policy.editedModels(); val allow = localHttp; val inputPin = serverPin
         setBusy(true)
         scope.launch {
             var create: ProviderCreateDraft? = null; var edit: ProviderEditDraft? = null
             var submitted = false; var confirmed = false
             try {
-                if (initial == null) create = ProviderCreateDraft(inputId, inputName, inputUrl, inputKey, inputModels, allow)
-                else edit = ProviderEditDraft(initial, inputName, inputUrl, inputKey, editedModels, allow)
+                if (initial == null) create = ProviderCreateDraft(inputId, inputName, inputUrl, inputKey, inputModels, allow, inputPin)
+                else edit = ProviderEditDraft(initial, inputName, inputUrl, inputKey, editedModels, allow, inputPin)
                 // Validate locally before any network call. A typo does not erase the password field.
                 create?.validate(); edit?.validate()
                 if (!current(session, sequence)) return@launch
@@ -228,7 +229,7 @@ fun ProvidersPanel(
                                 // Show the base the core expects; a config saved with a full
                                 // endpoint is repaired on the next save (avoids doubled path/404).
                                 val shownBase = runCatching { ProviderBaseUrl.normalize(edit.chatUrl) }.getOrDefault(edit.chatUrl)
-                                snapshot = edit; id = edit.id; name = edit.name; baseUrl = shownBase; key = ""; nameTouched = true; idTouched = true
+                                snapshot = edit; id = edit.id; name = edit.name; baseUrl = shownBase; key = ""; serverPin = edit.serverPin; nameTouched = true; idTouched = true
                                 localHttp = edit.chatUrl.startsWith("http://"); advanced = false; manual = false
                                 policy = ProviderEditorPolicy(false, edit.modelIds, edit.noModels); selected = edit.modelIds
                                 modelOptions = provider.models; manualText = selected.joinToString("\n"); message = ""; open = true
@@ -285,6 +286,7 @@ fun ProvidersPanel(
                     Row { Checkbox(localHttp, enabled = !busy, onCheckedChange = { localHttp = it }); Text("明确允许本机HTTP（外部仍须HTTPS）") }
                     Row { Checkbox(manual, enabled = !busy, onCheckedChange = { manual = it }); Text("手动补充模型ID（仅备选）") }
                     if (manual) OutlinedTextField(manualText, { manualText = it; selected = policy.manual(it.split(',', '\n').map(String::trim).filter(String::isNotEmpty)); selectionMutation++ }, label = { Text("已确认可用的模型ID，每行一个") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(serverPin, { serverPin = it }, enabled = !busy, singleLine = true, label = { Text("服务器证书 SHA-256 指纹（可选，64 位小写 hex）") }, placeholder = { Text("留空不校验服务器证书") }, modifier = Modifier.fillMaxWidth())
                 }
                 if (message.isNotEmpty()) Text(message, color = MaterialTheme.colorScheme.error)
                 Text("保存只更新配置，不验证推理。密钥不写日志；结果未知时先核对而不重发。", style = MaterialTheme.typography.bodySmall)

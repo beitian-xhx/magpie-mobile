@@ -1,3 +1,14 @@
+## Magpie-Mobile 0.1.37-provider-serverpin (P8 功能对齐 A2)
+
+### 提供商服务器证书指纹（serverPin）
+- 创建/编辑提供商支持「服务器证书 SHA-256 指纹」（64 位小写 hex，留空不校验）：ProviderCreateDraft/ProviderEditDraft 透传，编辑仅在指纹变化时提交；
+- 核心 overlay：mobile_providers.go 解码白名单放行 serverPin；mobile_store.go 快照/创建/编辑三处对齐上游 provider.ServerPin（格式保持式 edit.KV 写入），mobileServerPin 校验（空或 64 位小写 hex）；
+- ProvidersPanel 高级设置新增指纹输入框；编辑打开时回填现有指纹；
+- 单测新增 ProviderServerPinTest（4 例：校验边界/创建嵌入/编辑脏检测）。
+
+### 版本
+- versionCode 38；核心 0.1.3781-mobile.1 不变；备份包 APP_VERSION 0.1.37。
+
 ## Magpie-Mobile 0.1.36-key-restrictions (P8 功能对齐 A1+A3)
 
 ### 密钥限制读写（核心 3781）

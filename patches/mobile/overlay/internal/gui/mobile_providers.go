@@ -45,11 +45,11 @@ func mobileProviderServe(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	case "/api/mobile/providers/create":
 		var in provider.MobileProviderCreate
-		err = mobileProviderDecode(w, r, &in, []string{"new", "id", "name", "chat", "key", "models", "noModels"})
+		err = mobileProviderDecode(w, r, &in, []string{"new", "id", "name", "chat", "key", "models", "noModels", "serverPin"})
 		if err == nil { snapshot, err = provider.MobileCreateProvider(in) }
 	case "/api/mobile/providers/edit":
 		var in provider.MobileProviderEdit
-		err = mobileProviderDecode(w, r, &in, []string{"id", "revision", "name", "chat", "key", "models", "noModels"})
+		err = mobileProviderDecode(w, r, &in, []string{"id", "revision", "name", "chat", "key", "models", "noModels", "serverPin"})
 		if err == nil { snapshot, err = provider.MobileEditProvider(in) }
 	default:
 		id, _ := strings.CutPrefix(r.URL.Path, "/api/mobile/providers/editable/")

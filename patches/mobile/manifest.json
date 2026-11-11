@@ -229,7 +229,7 @@
     },
     {
       "path": "internal/gui/mobile_providers.go",
-      "sha256": "0427d0b3e08fca723e027c8f68d49bcb8c6219f3fafc52261536eecc05ebf3ba"
+      "sha256": "8c58f018b83dc66c1887f55ed58253aa182223f643f88f0f6637656319cf01bc"
     },
     {
       "path": "internal/gui/mobile_providers_test.go",
@@ -257,7 +257,7 @@
     },
     {
       "path": "internal/provider/mobile_store.go",
-      "sha256": "633132a345c43cc2d62fe75648d7498c671191503c7a7b6a25a9dbb8fae64483"
+      "sha256": "6459c12dfbc115ba9b2817af8aa2814de2e7c904e75f404fff93826e55357f66"
     },
     {
       "path": "internal/provider/mobile_store_test.go",

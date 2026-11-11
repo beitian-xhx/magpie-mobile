@@ -20,7 +20,9 @@ class ProviderCreateDraft(
     apiKey: String,
     modelIds: List<String>,
     val allowLoopbackHttp: Boolean = false,
+    serverPin: String = "",
 ) {
+    private val serverPin: String = providerServerPin(serverPin)
     val id: String = providerCreateId(id)
     val name: String = providerName(name)
     // The core appends "/chat/completions" to the saved value, so store the base only.
@@ -48,6 +50,7 @@ class ProviderCreateDraft(
             put("models", buildJsonArray { modelIds.forEach { add(JsonPrimitive(it)) } })
             // Empty alone can mean ALL in the core. Creation always expresses Select none.
             put("noModels", modelIds.isEmpty())
+            if (serverPin.isNotEmpty()) put("serverPin", serverPin)
         }
     }
     @Synchronized
@@ -72,7 +75,9 @@ class ProviderEditDraft(
     apiKey: String = "",
     modelIds: List<String>? = null,
     val allowLoopbackHttp: Boolean = false,
+    serverPin: String? = null,
 ) {
+    private val changedServerPin = serverPin?.let { providerServerPin(it) }
     private val changedName = name?.let { providerName(it) }
     private val changedChat = chatUrl?.let {
         // A trusted unchanged loopback URL is not a new opt-in/change of endpoint.
@@ -100,7 +105,8 @@ class ProviderEditDraft(
         val chatDirty = changedChat != null && changedChat != snapshot.chatUrl
         val modelsDirty = changedModels != null &&
             (changedModels != snapshot.modelIds || changedModels.isEmpty() != snapshot.noModels)
-        if (!nameDirty && !chatDirty && !modelsDirty && key.isEmpty()) throw ProviderEditPreconditionException()
+        val pinDirty = changedServerPin != null && changedServerPin != snapshot.serverPin
+        if (!nameDirty && !chatDirty && !modelsDirty && !pinDirty && key.isEmpty()) throw ProviderEditPreconditionException()
         return buildJsonObject {
             put("id", snapshot.id); put("revision", snapshot.revision)
             if (nameDirty) put("name", changedName!!)
@@ -110,6 +116,7 @@ class ProviderEditDraft(
                 put("models", buildJsonArray { changedModels!!.forEach { add(JsonPrimitive(it)) } })
                 put("noModels", changedModels!!.isEmpty())
             }
+            if (pinDirty) put("serverPin", changedServerPin!!)
         }
     }
     @Synchronized
@@ -145,6 +152,13 @@ internal fun providerApiKey(raw: String, allowBlank: Boolean): String {
     require((allowBlank || key.isNotEmpty()) && key.length <= 8192 && key.all { it in '!'..'~' }) { "API密钥格式无效" }
     return key
 }
+internal fun providerServerPin(raw: String): String {
+    require(raw.none { it.isISOControl() }) { "服务器证书指纹格式无效" }
+    val pin = raw.trim()
+    require(pin.isEmpty() || (pin.length == 64 && pin.all { it in '0'..'9' || it in 'a'..'f' })) { "服务器证书指纹须为 64 位小写十六进制（SHA-256），留空表示不校验" }
+    return pin
+}
+
 internal fun providerModelIds(raw: List<String>): List<String> {
     require(raw.size <= 1000) { "模型标识数量超出安全上限" }
     val ids = raw.map { value ->
