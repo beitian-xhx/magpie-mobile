@@ -162,6 +162,8 @@ fun Dashboard(
                             viewModel = usageViewModel,
                             usageState = usageState
                         )
+                        ModelSpeedsCard(usageState = usageState)
+                        CatalogCard(usageState = usageState)
                         ModelRoutingCard(
                             clientReady = clientReady,
                             viewModel = routingViewModel,

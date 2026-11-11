@@ -2,6 +2,8 @@ package cc.fplj.magpiemobile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cc.fplj.magpiemobile.core.CatalogModel
+import cc.fplj.magpiemobile.core.ModelSpeed
 import cc.fplj.magpiemobile.core.UsageInsightEndpoint
 import cc.fplj.magpiemobile.core.UsageRecord
 import kotlinx.coroutines.CancellationException
@@ -23,6 +25,10 @@ data class UsageUiState(
     val historyJson: String = "",
     val summaryJson: String = "",
     val insightsError: String = "",
+    /** 本周模型速度（/api/model-speeds）：provider/model → ttft/tps/n；解析失败为空表。 */
+    val speeds: Map<String, ModelSpeed> = emptyMap(),
+    /** models.dev 已同步目录（/api/catalog/models）；只读元数据。 */
+    val catalog: List<CatalogModel> = emptyList(),
 )
 
 /**
@@ -38,6 +44,12 @@ class UsageViewModel(
     },
     private val summaryReader: suspend (String) -> String = { period ->
         withContext(Dispatchers.IO) { NativeCoreSession.managementClient().usageSummary(period) }
+    },
+    private val speedsReader: suspend () -> Map<String, ModelSpeed> = {
+        withContext(Dispatchers.IO) { NativeCoreSession.managementClient().modelSpeeds() }
+    },
+    private val catalogReader: suspend () -> List<CatalogModel> = {
+        withContext(Dispatchers.IO) { NativeCoreSession.managementClient().catalogModels() }
     }
 ) : ViewModel() {
 
@@ -73,7 +85,10 @@ class UsageViewModel(
                 val quotas = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS) }
                 val history = withContext(Dispatchers.IO) { insightsReader(UsageInsightEndpoint.QUOTAS_HISTORY) }
                 val summary = withContext(Dispatchers.IO) { summaryReader("today") }
-                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas, historyJson = history, summaryJson = summary) }
+                // 速度与目录为独立弹性数据：单点失败只清空自身，不影响主洞察。
+                val speeds = try { speedsReader() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyMap() }
+                val catalog = try { catalogReader() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+                mutable.update { it.copy(insightsLoading = false, heatmapJson = heatmap, quotasJson = quotas, historyJson = history, summaryJson = summary, speeds = speeds, catalog = catalog) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

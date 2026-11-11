@@ -1,3 +1,14 @@
+## Magpie-Mobile 0.1.35-model-speeds-catalog (P8 功能对齐 A5+A4)
+
+### 新端点对接（核心 3781）
+- **A5 模型速度排行**：GET /api/model-speeds 白名单放行 + CoreManagementClient.modelSpeeds() 弹性解析（ttft/tps/n），网关页新增「本周模型速度排行」卡片（top 6，首 token 毫秒 + 输出 tok/s）；
+- **A4 模型目录**：GET /api/catalog/models 白名单放行 + catalogModels() 解析，网关页新增「模型目录（models.dev 已同步）」卡片（条目总数 + 前 8 条 id/名称/上下文窗口）；
+- 安全口径延续：只读、仅聚合元数据、解析失败空表、绝不呈现原始正文；白名单仍为精确路径 allowlist；
+- 单测新增 ModelSpeedsCatalogParsingTest（5 例：典型/缺字段/畸形/空白/错误形状）。
+
+### 版本
+- versionCode 36；核心 0.1.3781-mobile.1 不变；备份包 APP_VERSION 0.1.35。
+
 ## Magpie-Mobile 0.1.34-upstream-3781 (P8 核心升级：对齐上游 270 commits)
 
 ### 核心升级 3622 → 3781（b52c711142a662fe18fedf5a80cb1e4aa94bce62）

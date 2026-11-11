@@ -35,7 +35,7 @@ func mobileAPIAllowed(method, p string) bool {
 		switch p {
 		case "/api/mobile/capabilities", "/api/caller-keys", "/api/caller-keys/models", "/api/state", "/api/providers",
 			"/api/usage/requests", "/api/usage/heatmap", "/api/usage/quotas", "/api/usage/quotas/history",
-			"/api/notices", "/api/usage":
+			"/api/notices", "/api/usage", "/api/model-speeds", "/api/catalog/models":
 			return true
 		}
 	}

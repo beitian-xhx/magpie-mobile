@@ -1,6 +1,7 @@
 package cc.fplj.magpiemobile.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -136,6 +137,24 @@ class CoreManagementClient(
         return decode { json.parseToJsonElement(body).jsonObject }
     }
 
+    /**
+     * GET /api/model-speeds（upstream speeds.go）：按 "provider/model" 的周均首 token 耗时与输出速度。
+     * 上游 schema 未钉死：单条字段缺失取默认值，整体畸形返回空表（绝不呈现原始正文）。
+     */
+    fun modelSpeeds(): Map<String, ModelSpeed> {
+        val body = transport.request("GET", "/api/model-speeds")
+        return decode { parseModelSpeeds(body) }
+    }
+
+    /**
+     * GET /api/catalog/models（upstream catalog_models.go）：已同步的 models.dev 目录条目。
+     * 只读元数据（id/名称/厂商/上下文窗口/价格），无凭据；解析失败返回空表。
+     */
+    fun catalogModels(): List<CatalogModel> {
+        val body = transport.request("GET", "/api/catalog/models")
+        return decode { parseCatalogModels(body) }
+    }
+
     /** Recent request audit trail from management plane (zero request/response body leakage). */
     fun recentRequests(limit: Int = 5): List<UsageRecord> {
         require(limit in 1..50) { "limit 必须在 1..50" }
@@ -148,6 +167,47 @@ class CoreManagementClient(
     } catch (_: Exception) {
         // Serialization errors can quote the response (including secrets). Never chain them.
         throw ManagementProtocolException()
+    }
+}
+
+/** speedJSON（upstream speeds.go）：首 token 平均毫秒、首 token 后每秒输出 token、计时样本数。 */
+@Serializable
+data class ModelSpeed(
+    val ttft: Long = 0,
+    val tps: Double = 0.0,
+    val n: Int = 0,
+)
+
+/** catalogModel（upstream catalog_models.go）：models.dev 目录的一个去重条目（只读元数据）。 */
+@Serializable
+data class CatalogModel(
+    val id: String,
+    val name: String = "",
+    val maker: String = "",
+    val context: Int = 0,
+    val output: Int = 0,
+    val input: Double = 0.0,
+    val cost: Double = 0.0,
+    val images: Boolean = false,
+)
+
+/** 弹性解析 {"provider/model": {ttft,tps,n}}；畸形/空输入返回空表，绝不抛原文。 */
+internal fun parseModelSpeeds(raw: String): Map<String, ModelSpeed> {
+    if (raw.isBlank()) return emptyMap()
+    return try {
+        Json { ignoreUnknownKeys = true }.decodeFromString<Map<String, ModelSpeed>>(raw)
+    } catch (_: Exception) {
+        emptyMap()
+    }
+}
+
+/** 弹性解析 models.dev 目录数组；畸形/空输入返回空表。 */
+internal fun parseCatalogModels(raw: String): List<CatalogModel> {
+    if (raw.isBlank()) return emptyList()
+    return try {
+        Json { ignoreUnknownKeys = true }.decodeFromString<List<CatalogModel>>(raw)
+    } catch (_: Exception) {
+        emptyList()
     }
 }
 
