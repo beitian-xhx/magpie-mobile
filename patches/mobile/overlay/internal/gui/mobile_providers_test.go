@@ -21,7 +21,7 @@ func TestMobileProviderHTTPAuthCreateAndRevision(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { upstreamCalls.Add(1); w.WriteHeader(500) }))
 	defer upstream.Close()
 	desktopCalls := 0
-	h := webHandler("3430", manager, 0, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { desktopCalls++; w.WriteHeader(418) })))
+	h := webHandler("3430", manager, 0, nil, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { desktopCalls++; w.WriteHeader(418) })))
 	call := func(method, p, body, cookie string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "http://127.0.0.1:3430"+p, strings.NewReader(body))
 		if cookie != "" { r.AddCookie(&http.Cookie{Name: "magpie_web_3430", Value: cookie}) }
@@ -52,7 +52,7 @@ func TestMobileProviderHTTPUnknownFieldsAndDangerousPaths(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	const manager = "mobile-provider-management-session"
 	calls := 0
-	h := webHandler("3430", manager, 0, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(418) })))
+	h := webHandler("3430", manager, 0, nil, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(418) })))
 	call := func(method, p, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "http://127.0.0.1:3430"+p, strings.NewReader(body))
 		r.AddCookie(&http.Cookie{Name: "magpie_web_3430", Value: manager})
@@ -74,7 +74,7 @@ func TestMobileProviderHTTPUnknownFieldsAndDangerousPaths(t *testing.T) {
 
 func TestMobileProviderHTTPCORSPreserved(t *testing.T) {
 	const manager = "mobile-provider-management-session"
-	h := webHandler("3430", manager, 0, mobileAPI(http.NotFoundHandler()))
+	h := webHandler("3430", manager, 0, nil, mobileAPI(http.NotFoundHandler()))
 	r := httptest.NewRequest("POST", "http://127.0.0.1:3430/api/mobile/providers/create", strings.NewReader("{}"))
 	r.AddCookie(&http.Cookie{Name: "magpie_web_3430", Value: manager})
 	r.Header.Set("Origin", "https://foreign.invalid")

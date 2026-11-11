@@ -29,7 +29,7 @@ func TestMobileCapabilitiesRequireManagementCookie(t *testing.T) {
 	Version = "mobile-test-version"
 	t.Cleanup(func() { Version = old })
 	// The real GUI Handler must install the mobile filter, not just a test mux.
-	h := webHandler("3430", key, 0, Handler(webHost{quit: func() {}}, nil))
+	h := webHandler("3430", key, 0, nil, Handler(webHost{quit: func() {}}, nil))
 	for _, value := range []string{"", "wrong", key} {
 		r := mobileCookieRequest("GET", "/api/mobile/capabilities", value)
 		w := httptest.NewRecorder()
@@ -74,7 +74,7 @@ func TestMobileCapabilitiesRequireManagementCookie(t *testing.T) {
 func TestMobileGUIExactWhitelist(t *testing.T) {
 	const key = "mobile-management-test-key-012345"
 	calls := 0
-	h := webHandler("3430", key, 0, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := webHandler("3430", key, 0, nil, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusNoContent)
 	})))
@@ -128,7 +128,7 @@ func TestMobileCallerKeyIssueAndCopy(t *testing.T) {
 	const key = "mobile-management-test-key-012345"
 	mux := http.NewServeMux()
 	callerKeyRoutes(mux)
-	h := webHandler("3430", key, 0, mobileAPI(mux))
+	h := webHandler("3430", key, 0, nil, mobileAPI(mux))
 	request := func(action, body, cookie string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "http://127.0.0.1:3430/api/caller-keys/"+action, strings.NewReader(body))
 		if cookie != "" {

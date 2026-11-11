@@ -217,7 +217,7 @@
     },
     {
       "path": "internal/gui/mobile_discovery_test.go",
-      "sha256": "985413d1d130d7c0174abeb1095387245e16958e1a5db461933c8298a597b206"
+      "sha256": "b13641232b027d7efc6e966ab36b414fdd1f4c9f229a96b78d6b507ad4ef8fa6"
     },
     {
       "path": "internal/gui/mobile_policy.go",
@@ -225,7 +225,7 @@
     },
     {
       "path": "internal/gui/mobile_policy_test.go",
-      "sha256": "6d0494c81fafef171e92821a42865e0398d15726ebc31e05af674a9f1d6db3d8"
+      "sha256": "f9532ed500ba601d0ad3acea2b58c90cf18b318530b10063cc000054f25d2803"
     },
     {
       "path": "internal/gui/mobile_providers.go",
@@ -233,7 +233,7 @@
     },
     {
       "path": "internal/gui/mobile_providers_test.go",
-      "sha256": "f970a0e937963ee2fa62b24298b169ff371ac602addcc7788c8853ba9d9dd0d0"
+      "sha256": "211810084b3780321e4457b2057ca9461d00b43cd0768c826206313561aaebc3"
     },
     {
       "path": "internal/mobilepolicy/enabled_desktop.go",

@@ -21,7 +21,7 @@ func TestMobileModelsDiscoveryHTTPAuthAndNoVendorPOST(t *testing.T) {
 	}))
 	defer vendor.Close()
 	desktopCalls := 0
-	h := webHandler("3430", manager, 0, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { desktopCalls++; w.WriteHeader(418) })))
+	h := webHandler("3430", manager, 0, nil, mobileAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { desktopCalls++; w.WriteHeader(418) })))
 	body, _ := json.Marshal(map[string]any{"chat": vendor.URL+"/v1", "key": "temporary-directory-secret-012345"})
 	call := func(method, p, cookie, payload string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "http://127.0.0.1:3430"+p, strings.NewReader(payload))
@@ -46,7 +46,7 @@ func TestMobileModelsDiscoveryHTTPFixedErrorAndCORS(t *testing.T) {
 	for _, status := range []int{401, 429} {
 		var calls atomic.Int64
 		vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(status); _, _ = w.Write([]byte(secret+" free-form vendor response")) }))
-		h := webHandler("3430", manager, 0, mobileAPI(http.NotFoundHandler()))
+		h := webHandler("3430", manager, 0, nil, mobileAPI(http.NotFoundHandler()))
 		body, _ := json.Marshal(map[string]string{"chat": vendor.URL+"/v1"})
 		r := httptest.NewRequest("POST", "http://127.0.0.1:3430/api/mobile/providers/models", strings.NewReader(string(body)))
 		r.AddCookie(&http.Cookie{Name: "magpie_web_3430", Value: manager})
