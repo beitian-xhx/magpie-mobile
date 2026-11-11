@@ -20,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +37,7 @@ import cc.fplj.magpiemobile.core.EnginePaths
 import cc.fplj.magpiemobile.core.GatewayEngineController
 import cc.fplj.magpiemobile.core.ModelsClient
 import cc.fplj.magpiemobile.core.SecretRedactor
+import cc.fplj.magpiemobile.theme.MagpieTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                 cc.fplj.magpiemobile.preferences.ThemeMode.LIGHT -> false
                 cc.fplj.magpiemobile.preferences.ThemeMode.DARK -> true
             }
-            MaterialTheme(colorScheme = if (dark) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) {
+            MagpieTheme(darkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     Dashboard(
                         layout = layout,

@@ -38,7 +38,7 @@ import kotlinx.serialization.json.put
  */
 object ConfigBackupManager {
     const val APP_NAME = "Magpie-Mobile"
-    const val APP_VERSION = "0.1.31"
+    const val APP_VERSION = "0.1.32"
     const val CURRENT_SCHEMA_VERSION = 1
     const val MAX_BACKUP_BYTES = 5 * 1024 * 1024 // 5 MB
 
