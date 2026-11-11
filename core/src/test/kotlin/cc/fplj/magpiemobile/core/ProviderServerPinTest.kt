@@ -12,7 +12,7 @@ class ProviderServerPinTest {
     @Test
     fun pinValidationAcceptsEmptyAndLowerHex() {
         assertEquals("", providerServerPin(""))
-        assertEquals("  ", providerServerPin("  "))
+        assertEquals("", providerServerPin("  "))
         assertEquals(pin64, providerServerPin(pin64))
     }
 
@@ -35,7 +35,7 @@ class ProviderServerPinTest {
 
     @Test
     fun editDraftMarksPinDirtyOnlyOnChange() {
-        val snapshot = ProviderEditSnapshot("demo", "r".repeat(64), "Demo", "https://api.example.com", listOf("m"), false, ProviderKeyMetadata(true, false, true), pin64)
+        val snapshot = ProviderEditSnapshot("demo", "a".repeat(64), "Demo", "https://api.example.com", listOf("m"), false, ProviderKeyMetadata(true, false, true), pin64)
         val same = ProviderEditDraft(snapshot, serverPin = pin64)
         assertFailsWith<ProviderEditPreconditionException> { same.validate() }
         val changed = ProviderEditDraft(snapshot, serverPin = "b".repeat(64))
