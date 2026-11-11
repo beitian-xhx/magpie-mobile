@@ -10,6 +10,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cc.fplj.magpiemobile.core.GatewayEngineController
+import cc.fplj.magpiemobile.core.KeyLimit
+import cc.fplj.magpiemobile.core.RegisteredGatewayKey
 import cc.fplj.magpiemobile.core.SecretRedactor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -93,6 +95,7 @@ internal fun GatewayKeysCard(
     val clipboard = LocalClipboardManager.current
     var notice by remember { mutableStateOf("") }
     var newKeyName by remember { mutableStateOf("") }
+    var editingKey by remember { mutableStateOf<RegisteredGatewayKey?>(null) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -134,17 +137,43 @@ internal fun GatewayKeysCard(
                                         "ID: " + key.id.take(12) + "…" + (if (key.readOnly) " · 只读" else "") + (if (key.off) " · 已停用" else ""),
                                         style = MaterialTheme.typography.labelSmall
                                     )
-                                }
-                                OutlinedButton(
-                                    enabled = !key.off && !keysState.loading,
-                                    onClick = {
-                                        viewModel.copyKey(key.id) { secret ->
-                                            clipboard.setText(AnnotatedString(secret))
-                                            notice = "已复制密钥 [" + key.name + "] 到剪贴板"
-                                        }
+                                    key.limit?.let { l ->
+                                        Text(limitSummary(l), style = MaterialTheme.typography.labelSmall)
                                     }
-                                ) {
-                                    Text("复制 Key")
+                                    if (key.moreLimits.isNotEmpty()) {
+                                        Text("另有 " + key.moreLimits.size + " 个额度窗口", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    if (key.models.isNotEmpty()) {
+                                        Text("模型白名单：" + key.models.joinToString(", ").take(56) + if (key.models.joinToString().length > 56) "…" else "", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    if (key.aliases.isNotEmpty()) {
+                                        Text("模型别名：" + key.aliases.size + " 项", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    if (key.serviceTier.isNotBlank()) {
+                                        Text("服务档：" + key.serviceTier, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    if (key.maxConcurrency > 0) {
+                                        Text("并发上限：" + key.maxConcurrency, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    OutlinedButton(
+                                        enabled = !key.off && !keysState.loading,
+                                        onClick = {
+                                            viewModel.copyKey(key.id) { secret ->
+                                                clipboard.setText(AnnotatedString(secret))
+                                                notice = "已复制密钥 [" + key.name + "] 到剪贴板"
+                                            }
+                                        }
+                                    ) {
+                                        Text("复制 Key")
+                                    }
+                                    TextButton(
+                                        enabled = !key.off && !keysState.loading,
+                                        onClick = { editingKey = key }
+                                    ) {
+                                        Text("限制")
+                                    }
                                 }
                             }
                         }
@@ -207,6 +236,77 @@ internal fun GatewayKeysCard(
             }
         }
     }
+    editingKey?.let { key ->
+        KeyRestrictionsDialog(key = key, viewModel = viewModel, onDismiss = { editingKey = null })
+    }
+}
+
+
+/** A1：密钥限制编辑对话框（models-key / aliases-key / tier-key）。 */
+@Composable
+private fun KeyRestrictionsDialog(
+    key: RegisteredGatewayKey,
+    viewModel: GatewayKeysViewModel,
+    onDismiss: () -> Unit,
+) {
+    var modelsText by remember { mutableStateOf(key.models.joinToString(", ")) }
+    var aliasesText by remember { mutableStateOf(key.aliases.entries.joinToString("\n") { it.key + "=" + it.value }) }
+    var tierText by remember { mutableStateOf(key.serviceTier) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = {
+                val models = modelsText.split(',', '，', ' ').map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                val aliases = aliasesText.lines().mapNotNull { line ->
+                    val idx = line.indexOf('=')
+                    if (idx > 0) {
+                        val name = line.substring(0, idx).trim()
+                        val target = line.substring(idx + 1).trim()
+                        if (name.isNotBlank() && target.isNotBlank()) name to target else null
+                    } else null
+                }.toMap()
+                viewModel.updateKeyRestrictions(key.id, models, aliases, tierText.trim(), onDone = onDismiss)
+            }) {
+                Text("保存")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        title = { Text("编辑密钥限制 · " + key.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = modelsText,
+                    onValueChange = { modelsText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("模型白名单（逗号分隔；留空=不修改）") },
+                )
+                OutlinedTextField(
+                    value = aliasesText,
+                    onValueChange = { aliasesText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    label = { Text("模型别名（每行 名称=provider/model；留空=不修改）") },
+                )
+                OutlinedTextField(
+                    value = tierText,
+                    onValueChange = { tierText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("服务档（standard/priority/ultrafast；清空=跟随请求）") },
+                )
+            }
+        },
+    )
+}
+
+private fun limitSummary(l: KeyLimit): String {
+    val cap = when {
+        l.tokens > 0 -> l.tokens.toString() + " tokens"
+        l.cost > 0 -> "$ " + l.cost
+        else -> "不限"
+    }
+    val cycle = if (l.days > 0) "×" + l.days + "d" else if (l.hours > 0) "×" + l.hours + "h" else ""
+    return "额度窗口：" + l.period.ifBlank { "周期" } + cycle + " · 上限 " + cap
 }
 
 

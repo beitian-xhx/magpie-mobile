@@ -155,6 +155,21 @@ class CoreManagementClient(
         return decode { parseCatalogModels(body) }
     }
 
+    /**
+     * POST /api/caller-keys/{action}（upstream 3781）：按白名单动作更新密钥限制。
+     * 每次只发送单一动作字段（encodeDefaults=false），绝不误清其他限制；
+     * 返回脱敏后的完整密钥列表。
+     */
+    @Synchronized
+    fun updateCallerKey(action: CallerKeyAction, change: CallerKeyChange): List<RegisteredGatewayKey> {
+        require(validGatewayId(change.key)) { "网关密钥标识无效" }
+        val request = Json { encodeDefaults = false }.encodeToString(change).toByteArray(Charsets.UTF_8)
+        val body = transport.request("POST", "/api/caller-keys/" + action.path, request)
+        return decode {
+            json.decodeFromString(CreatedCallerKeyResponse.serializer(), body).keys.map { it.copy(secret = "") }
+        }
+    }
+
     /** Recent request audit trail from management plane (zero request/response body leakage). */
     fun recentRequests(limit: Int = 5): List<UsageRecord> {
         require(limit in 1..50) { "limit 必须在 1..50" }
@@ -232,6 +247,18 @@ data class RegisteredGatewayKey(
     val browser: Boolean = false,
     /** RFC3339 from access.Key; absent means no expiry. Kept as the exact core value. */
     val expires: String? = null,
+    /** models-key 白名单（upstream 3781）；空=可用全部模型。 */
+    val models: List<String> = emptyList(),
+    /** aliases-key 模型别名（名称 -> provider/model）。 */
+    val aliases: Map<String, String> = emptyMap(),
+    /** tier-key 服务档；空=跟随请求。 */
+    val serviceTier: String = "",
+    /** 首个额度窗口（limit-key 设置）；无=不限额。 */
+    val limit: KeyLimit? = null,
+    /** 后续额度窗口（moreLimits）。 */
+    val moreLimits: List<KeyLimit> = emptyList(),
+    /** 并发上限（concurrency-key）；0=不限。 */
+    val maxConcurrency: Int = 0,
 ) {
     // Even accidentally logging a collection/map must not print any part of secret.
     override fun toString(): String = "RegisteredGatewayKey(secret=<redacted>)"
@@ -239,6 +266,34 @@ data class RegisteredGatewayKey(
 
 @Serializable
 private data class CallerKeysResponse(val keys: List<RegisteredGatewayKey>)
+
+/** upstream 3781 access.Limit：一个额度窗口（period/days/hours/tokens/cost/cacheReads/models）。 */
+@Serializable
+data class KeyLimit(
+    val period: String = "",
+    val days: Int = 0,
+    val hours: Int = 0,
+    val tokens: Long = 0,
+    val cost: Double = 0.0,
+    val cacheReads: Boolean = false,
+    val models: List<String> = emptyList(),
+)
+
+/** 白名单化密钥更新动作（精确路径，非前缀）。 */
+enum class CallerKeyAction(internal val path: String) {
+    MODELS("models-key"),
+    ALIASES("aliases-key"),
+    TIER("tier-key"),
+}
+
+/** upstream 3781 access.Change 的移动端子集：key 必填，其余按需单字段发送。 */
+@Serializable
+data class CallerKeyChange(
+    val key: String = "",
+    val models: List<String> = emptyList(),
+    val aliases: Map<String, String> = emptyMap(),
+    val serviceTier: String = "",
+)
 
 /** Upstream keyModelJSON (caller_keys.go): id is "<provider>/<model>" or "group/<id>". */
 @Serializable

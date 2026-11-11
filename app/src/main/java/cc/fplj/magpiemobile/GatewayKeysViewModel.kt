@@ -2,6 +2,8 @@ package cc.fplj.magpiemobile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cc.fplj.magpiemobile.core.CallerKeyAction
+import cc.fplj.magpiemobile.core.CallerKeyChange
 import cc.fplj.magpiemobile.core.RegisteredGatewayKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,9 @@ class GatewayKeysViewModel(
     },
     private val keyCopier: suspend (String) -> RegisteredGatewayKey = { id ->
         withContext(Dispatchers.IO) { NativeCoreSession.managementClient().copyCallerKey(id) }
+    },
+    private val keyUpdater: suspend (CallerKeyAction, CallerKeyChange) -> List<RegisteredGatewayKey> = { action, change ->
+        withContext(Dispatchers.IO) { NativeCoreSession.managementClient().updateCallerKey(action, change) }
     },
 ) : ViewModel() {
 
@@ -98,5 +103,34 @@ class GatewayKeysViewModel(
 
     fun dismissNewKeyDialog() {
         mutable.update { it.copy(newlyCreatedKey = null) }
+    }
+
+    /**
+     * A1：按白名单动作逐项更新密钥限制（models-key / aliases-key / tier-key）。
+     * 每项独立 POST、失败即停，绝不误清其他限制；成功后整表刷新。
+     */
+    fun updateKeyRestrictions(
+        id: String,
+        models: List<String>,
+        aliases: Map<String, String>,
+        tier: String,
+        onDone: () -> Unit = {},
+    ) {
+        if (id.isBlank()) return
+        mutable.update { it.copy(loading = true, error = "", notice = "") }
+        viewModelScope.launch {
+            try {
+                if (models.isNotEmpty()) keyUpdater(CallerKeyAction.MODELS, CallerKeyChange(key = id, models = models))
+                if (aliases.isNotEmpty()) keyUpdater(CallerKeyAction.ALIASES, CallerKeyChange(key = id, aliases = aliases))
+                if (tier.isNotBlank() || tier == "") keyUpdater(CallerKeyAction.TIER, CallerKeyChange(key = id, serviceTier = tier))
+                mutable.update { it.copy(loading = false, notice = "密钥限制已更新") }
+                refresh(clearNotice = false)
+                onDone()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                mutable.update { it.copy(loading = false, error = e.message ?: "更新密钥限制失败") }
+            }
+        }
     }
 }

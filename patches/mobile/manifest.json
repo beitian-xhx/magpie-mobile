@@ -221,7 +221,7 @@
     },
     {
       "path": "internal/gui/mobile_policy.go",
-      "sha256": "d596bfdfe556a6f01f71e569b96c020cc11b3cf7b910f5cae8c7d58d6d378e13"
+      "sha256": "172d9e4757d538d262283c6fe77de90637395143fde74da3a3df1c5c238b343f"
     },
     {
       "path": "internal/gui/mobile_policy_test.go",

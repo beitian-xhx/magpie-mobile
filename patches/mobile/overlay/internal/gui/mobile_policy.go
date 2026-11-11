@@ -39,7 +39,7 @@ func mobileAPIAllowed(method, p string) bool {
 			return true
 		}
 	}
-	return mobileProviderAPIAllowed(method, p) || method == http.MethodPost && (p == "/api/caller-keys/add-key" || p == "/api/caller-keys/copy-key")
+	return mobileProviderAPIAllowed(method, p) || method == http.MethodPost && (p == "/api/caller-keys/add-key" || p == "/api/caller-keys/copy-key" || p == "/api/caller-keys/models-key" || p == "/api/caller-keys/aliases-key" || p == "/api/caller-keys/tier-key")
 }
 
 func mobileAPI(next http.Handler) http.Handler {

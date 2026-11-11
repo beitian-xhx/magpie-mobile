@@ -1,3 +1,13 @@
+## Magpie-Mobile 0.1.36-key-restrictions (P8 功能对齐 A1+A3)
+
+### 密钥限制读写（核心 3781）
+- **A1 扩展写**：POST /api/caller-keys/{models-key|aliases-key|tier-key} 白名单放行；CoreManagementClient.updateCallerKey 每次单字段发送（encodeDefaults=false，绝不误清其他限制）；网关密钥卡片新增「限制」编辑对话框（模型白名单/模型别名/服务档）；
+- **A3 只读展示**：密钥行内联展示额度窗口（period×days/hours、tokens/cost 上限）、moreLimits 计数、模型白名单、别名数、服务档、并发上限；RegisteredGatewayKey 与 KeyLimit 模型对齐 upstream access.Key/Limit；
+- 单测新增 KeyRestrictionsParsingTest（3 例：载荷省略空字段/空模型字段丢弃/限额与 tier 解析）。
+
+### 版本
+- versionCode 37；核心 0.1.3781-mobile.1 不变；备份包 APP_VERSION 0.1.36。
+
 ## Magpie-Mobile 0.1.35-model-speeds-catalog (P8 功能对齐 A5+A4)
 
 ### 新端点对接（核心 3781）
