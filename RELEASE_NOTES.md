@@ -1,3 +1,15 @@
+## Magpie-Mobile 0.1.34-upstream-3781 (P8 核心升级：对齐上游 270 commits)
+
+### 核心升级 3622 → 3781（b52c711142a662fe18fedf5a80cb1e4aa94bce62）
+- 上游 270 commits / 909 文件：新增 Agent 管理、订阅账号、隐私脱敏（PII masking）、意图路由、网关中间件、搜索/生图 MCP 工具等 40+ 功能域（详 docs/p8-gap-3781.md）；
+- 移动补丁包重定位：34 条替换锚点 33 条直接命中，仅 lan.go 身份注入 1 条按新上下文（aliasRequest 别名行）重推导；apply 模拟测试 19/19 通过；
+- 安全策略完整保留：mobilepolicy 开关、受管密钥、loopback 门禁与 callerGuard 认证路径全部延续；
+- API 面纯增量（22 条新 /api 路由、0 删除），移动白名单为精确路径 allowlist，新桌面路由在 mobile 下自动 404 无暴露面；
+- Go 1.26.8 不变；nogui,mobile 标签不变；16KB 页面对齐与固定签名链路不变。
+
+### 版本
+- versionCode 35；CORE_VERSION 0.1.3781-mobile.1；备份包 APP_VERSION 0.1.34。
+
 ## Magpie-Mobile 0.1.33-structure-uikit (P8 结构优化第三阶段)
 
 ### 结构优化（零行为变更）

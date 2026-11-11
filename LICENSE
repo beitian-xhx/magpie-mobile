@@ -25,7 +25,7 @@ SOFTWARE.
 Third-party components bundled or derived in this repository:
 
 1. Magpie core (internal/** patches and the packaged ELF payloads)
-   Upstream: https://github.com/yetone/magpie (pinned: v0.1.3622 / 025123431c140a4988efc3d5c44546e8d73d16d3)
+   Upstream: https://github.com/yetone/magpie (pinned: v0.1.3781 / b52c711142a662fe18fedf5a80cb1e4aa94bce62)
    License: MIT License, Copyright (c) 2026 yetone
    Source of the full license text and runtime notices: GET /api/notices in the
    running gateway, or the THIRD_PARTY_NOTICES asset shipped by upstream.

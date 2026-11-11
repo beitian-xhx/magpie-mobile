@@ -38,6 +38,6 @@
 
 ## 验证与操作
 
-CI 执行 Python 应用器、JVM 全量测试、Go 安全测试、host fake-vendor GET-only 烟测，再构建固定 v0.1.3622/Go1.26.8 mobile,nogui AndroidARM64 PIE 核心 `0.1.3622-mobile.1`（16KB 页对齐，`-Wl,-z,max-page-size=16384`）与固定签名 APK，核对载荷 SHA-256 与签名证书。安装后核对版本/SHA 并按 [安装指南](docs/upgrade-guide-0.1.30.md) 验证。
+CI 执行 Python 应用器、JVM 全量测试、Go 安全测试、host fake-vendor GET-only 烟测，再构建固定 v0.1.3781/Go1.26.8 mobile,nogui AndroidARM64 PIE 核心 `0.1.3781-mobile.1`（16KB 页对齐，`-Wl,-z,max-page-size=16384`）与固定签名 APK，核对载荷 SHA-256 与签名证书。安装后核对版本/SHA 并按 [安装指南](docs/upgrade-guide-0.1.30.md) 验证。
 
 本地大版本升级基线：v0.1.3622 起步（旧基线 v0.1.3188 的 24 个补丁目标文件零变更，升级流程见技能库与 gap-analysis §5）。

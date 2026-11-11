@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
             time.sleep(.1)
         else: raise AssertionError('authenticated management never became ready')
         cap=json.loads(body)
-        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3622-mobile.1','mobile':True,
+        assert cap=={'schemaVersion':1,'coreVersion':'0.1.3781-mobile.1','mobile':True,
                      'loopbackKeys':True,'debugEndpoints':False,'adminLoopbackOnly':True,'nativeAutoUpdate':False,
                      'providerSchemaVersion':1,'providerManagement':True,'providerModelDiscovery':True}
         assert request(admin,'/api/mobile/capabilities')[0]==401
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix='magpie-mobile-smoke-') as temporary:
         own_id=own[0]['id']
         auth={'Authorization':'Bearer '+secret}
         code,body=request(gateway,'/api/hello',headers=auth)
-        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3622-mobile.1'}
+        assert code==200 and json.loads(body)=={'name':'magpie','version':'0.1.3781-mobile.1'}
         assert request(gateway,'/v1/magpie/goroutines',headers=auth)[0]==404
         assert request(gateway,'/v1/magpie/heap',headers=auth)[0]==404
         assert request(admin,'/api/window/restart','POST',{},cookie)[0]==404

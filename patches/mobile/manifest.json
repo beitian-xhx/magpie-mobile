@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceRevision": "025123431c140a4988efc3d5c44546e8d73d16d3",
+  "sourceRevision": "b52c711142a662fe18fedf5a80cb1e4aa94bce62",
   "goVersion": "1.26.8",
   "checks": [
     {
@@ -11,7 +11,7 @@
   "patches": [
     {
       "path": "internal/gateway/gateway.go",
-      "sha256": "db5fd88e6f2c2a90ecde5040817f66090a14f64518f4fa96cdda2559b7693680",
+      "sha256": "1ec066052699c1ad89561e11186941e6f59a3747bc35b7675fd194d0cacf73b8",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/settings\"\n",
@@ -45,7 +45,7 @@
     },
     {
       "path": "internal/gateway/lan.go",
-      "sha256": "39f45eccf452ec06f377b52f82e323e78df6bf14bc2e70e20c098cf2d03db51d",
+      "sha256": "0f56083263f50b5162c195ae09ea52470ccdf1893551f5c01e54be2a476939f7",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/settings\"\n",
@@ -92,15 +92,15 @@
           "new": "\tif !ok && (mobilepolicy.Enabled || !local(r)) {\n"
         },
         {
-          "old": "\tif ok {\n\t\tr = r.WithContext(access.WithIdentity(r.Context(), who))\n\t}\n",
-          "new": "\tif ok {\n\t\tr = r.WithContext(access.WithIdentity(r.Context(), who))\n\t\tif mobilepolicy.Enabled {\n\t\t\tr = r.WithContext(context.WithValue(r.Context(), mobileAuthenticated{}, true))\n\t\t}\n\t}\n"
+          "old": "\tif ok {\n\t\tr = r.WithContext(access.WithIdentity(r.Context(), who))\n\t\t// the names the key gives models, before any route reads one\n\t\tr = aliasRequest(r, who)\n\t}\n",
+          "new": "\tif ok {\n\t\tr = r.WithContext(access.WithIdentity(r.Context(), who))\n\t\t// the names the key gives models, before any route reads one\n\t\tr = aliasRequest(r, who)\n\t\tif mobilepolicy.Enabled {\n\t\t\tr = r.WithContext(context.WithValue(r.Context(), mobileAuthenticated{}, true))\n\t\t}\n\t}\n"
         }
       ],
       "resultSha256": "22439a3d977fb2db0d84b19c8c8fcddbc38f56ba468abd3ca52aaf7a9e4ed2d4"
     },
     {
       "path": "internal/gui/web.go",
-      "sha256": "11998be9b45d94f6782c57661f3faab2c26153c65f729c4ede087943828782d1",
+      "sha256": "9c71d4d3e0f66db68d2d3a29f7828d515b3818cc82a0d4666b311a6e3b531082",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/plugin\"\n",
@@ -127,7 +127,7 @@
     },
     {
       "path": "internal/gui/api.go",
-      "sha256": "967785564d039c288af2f2ad6b5128eae1127946cea286d26f24b48bcb11d7e6",
+      "sha256": "292c13d9e1b67f355307a13a3a3c708880b090378a4744d80af04244e799247d",
       "replacements": [
         {
           "old": "\treturn noFramedAPI(held(mux))\n",
@@ -138,7 +138,7 @@
     },
     {
       "path": "internal/gui/update.go",
-      "sha256": "e53156f2082c33bac2d29877fa49374228f3ca16bcbc2c2b5a082b36f4b4ff31",
+      "sha256": "5173aacfed9f0d98fa6963cd9f2806ff9360fb499ac5d9fe4bff7a0df6d5e46c",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/settings\"\n",
@@ -153,7 +153,7 @@
     },
     {
       "path": "internal/cli/web_cli.go",
-      "sha256": "de3f594690f59e31abdc8df595135ddb013f3d9ae8765562da3e60a24c6ccf7c",
+      "sha256": "22f10f79ad5cb6530d39508cb2bb681066d4577c2082533712dce834f2c7a82e",
       "replacements": [
         {
           "old": "\t\"github.com/yetone/magpie/internal/gui\"\n",
@@ -168,7 +168,7 @@
     },
     {
       "path": "internal/provider/provider.go",
-      "sha256": "bacba933799c4afc76b68dd5cf171740bf9e704632efd50d8cb20b6a55ec0b71",
+      "sha256": "50a324f898ec3be1577a568f1f173f37c14e74d6b0bdcc3848c500d444656284",
       "replacements": [
         {
           "old": "type file struct {\n",
