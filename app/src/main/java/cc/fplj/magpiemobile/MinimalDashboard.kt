@@ -26,6 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cc.fplj.magpiemobile.core.EnginePaths
 import cc.fplj.magpiemobile.core.GatewayEngineController
+import cc.fplj.magpiemobile.core.SecretRedactor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * 精简的 PC Magpie 风格界面：只保留「路由」与「用量」两页。
@@ -237,6 +242,66 @@ private fun RoutingContent(
                     Text("可用", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
+    }
+
+    SelfTestPanel(
+        clientReady = clientReady,
+        currentGatewayKey = currentGatewayKey,
+        model = shell.models.firstOrNull()?.id,
+        engineLog = gateway.outputTail,
+    )
+}
+
+@Composable
+private fun SelfTestPanel(
+    clientReady: Boolean,
+    currentGatewayKey: String?,
+    model: String?,
+    engineLog: String,
+) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var lines by remember { mutableStateOf(listOf<String>()) }
+
+    MonoPanel("Self test / 网关自检") {
+        Text(
+            "直接向本机网关发 3 次流式请求（不经过 DSH Go）。全部成功 = 问题在 DSH 一侧（超时/并发排队）；间歇失败 = 网关或上游问题。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            enabled = !busy && clientReady && currentGatewayKey != null && model != null,
+            onClick = {
+                val key = currentGatewayKey ?: return@Button
+                val id = model ?: return@Button
+                busy = true
+                lines = emptyList()
+                scope.launch(Dispatchers.IO) {
+                    val results = MagpieSelfTest.run(key, id) { stage -> lines = lines + stage }
+                    results.forEach { a ->
+                        lines = lines + (if (a.ok) "  ✓ #${a.status} ${a.millis}ms 首块=${a.firstChunk.take(80)}"
+                        else "  ✗ #${a.status} ${a.millis}ms ${a.error.take(160)}")
+                    }
+                    busy = false
+                }
+            },
+        ) { Text(if (busy) "测试中…" else "连续测试 3 次") }
+        if (!clientReady || currentGatewayKey == null || model == null) {
+            Text("需要网关运行、核心连接就绪且有可用模型。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
+
+    MonoPanel("Engine log / 引擎日志") {
+        if (engineLog.isBlank()) {
+            Text("暂无引擎输出。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Text(
+                SecretRedactor.redact(engineLog).takeLast(2500),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
