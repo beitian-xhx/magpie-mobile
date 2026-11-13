@@ -111,10 +111,10 @@ object NativeCoreSession {
         binding?.takeIf { isRunningOwner(it) }?.config?.gatewayKey
     }
 
-    fun managementClient(): cc.fplj.magpiemobile.core.CoreManagementClient = synchronized(lock) {
+    fun managementClient(timeout: java.time.Duration = java.time.Duration.ofSeconds(5)): cc.fplj.magpiemobile.core.CoreManagementClient = synchronized(lock) {
         val current = binding ?: error("请先启动网关")
         check(isRunningOwner(current) && current.config != null) { "核心安全连接尚未完成" }
-        cc.fplj.magpiemobile.core.CoreManagementClient(current.credential)
+        cc.fplj.magpiemobile.core.CoreManagementClient(current.credential, timeout = timeout)
     }
 
     fun providerClient(): cc.fplj.magpiemobile.core.ProviderManagementClient = synchronized(lock) {

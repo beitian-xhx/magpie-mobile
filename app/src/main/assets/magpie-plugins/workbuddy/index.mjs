@@ -4370,7 +4370,10 @@ function makePlugin(site) {
             // as WorkBuddy's client asks it (withDefaultEffort); with no
             // list to read (effortList) the chat goes as it came
             const completion = !native && isCompletion(req ? req.url : input, chat)
-            if (completion && chat && !namesEffort(chat) && withDefaultEffort(chat, await effortList(a))) changed = true
+            // Android is an API gateway: an omitted effort belongs to the client.
+            // Do not block inference on /v3/config or silently enable high reasoning.
+            // Explicit effort and free-only price checks above still take effect.
+            if (process.env.MAGPIE_MOBILE !== "1" && completion && chat && !namesEffort(chat) && withDefaultEffort(chat, await effortList(a))) changed = true
             chatHeaders(site, headers)
             let who = scopeOf(a)
             let ids = attendChat(headers, chat, session, who)

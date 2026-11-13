@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import cc.fplj.magpiemobile.core.EnginePaths
 import cc.fplj.magpiemobile.core.GatewayEngineController
 import cc.fplj.magpiemobile.core.SecretRedactor
@@ -59,7 +60,7 @@ fun MinimalDashboard(
     val gateway by GatewayRuntime.status.collectAsStateWithLifecycle()
     val connection by NativeCoreSession.status.collectAsStateWithLifecycle()
     val stopping by GatewayRuntime.stopping.collectAsStateWithLifecycle()
-    val usageViewModel: UsageViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val usageViewModel: UsageDashboardViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val usageState by usageViewModel.state.collectAsStateWithLifecycle()
     val magpieProvidersViewModel: MagpieProvidersViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val magpieProvidersState by magpieProvidersViewModel.state.collectAsStateWithLifecycle()
@@ -77,12 +78,21 @@ fun MinimalDashboard(
     val owner = if (clientReady) NativeCoreSession.providerSessionId() else null
     val currentGatewayKey = if (clientReady) NativeCoreSession.currentGatewayKey() else null
 
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(clientReady, owner) {
         appShell.connectionChanged()
-        if (clientReady) usageViewModel.refresh(20) else usageViewModel.clear()
+        if (!clientReady) usageViewModel.clear()
     }
-    LaunchedEffect(page, clientReady) {
-        if (page == "usage" && clientReady) usageViewModel.loadInsights()
+    LaunchedEffect(page, clientReady, owner, lifecycle) {
+        if (page == "usage" && clientReady) {
+            lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                usageViewModel.refresh(asked = true)
+                while (true) {
+                    kotlinx.coroutines.delay(10_000)
+                    usageViewModel.refreshLocal()
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -151,11 +161,7 @@ fun MinimalDashboard(
                     onRefreshModels = appShell::refreshModels,
                 )
             } else {
-                UsageContent(
-                    clientReady = clientReady,
-                    viewModel = usageViewModel,
-                    usageState = usageState,
-                )
+                UsageDashboardContent(ready = clientReady, vm = usageViewModel, state = usageState)
             }
         }
     }
@@ -248,7 +254,7 @@ private fun RoutingContent(
     SelfTestPanel(
         clientReady = clientReady,
         currentGatewayKey = currentGatewayKey,
-        model = shell.models.firstOrNull()?.id,
+        models = shell.models.map { it.id },
         engineLog = gateway.outputTail,
     )
 }
@@ -257,39 +263,54 @@ private fun RoutingContent(
 private fun SelfTestPanel(
     clientReady: Boolean,
     currentGatewayKey: String?,
-    model: String?,
+    models: List<String>,
     engineLog: String,
 ) {
     val scope = rememberCoroutineScope()
+    val probe = remember { MagpieSelfTest() }
     var busy by remember { mutableStateOf(false) }
     var lines by remember { mutableStateOf(listOf<String>()) }
+    var model by rememberSaveable { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(models) { if (model !in models) model = models.firstOrNull().orEmpty() }
+    androidx.compose.runtime.DisposableEffect(probe) {
+        onDispose { java.util.concurrent.CompletableFuture.runAsync { probe.cancel() } }
+    }
 
     MonoPanel("Self test / 网关自检") {
         Text(
-            "直接向本机网关发 3 次流式请求（不经过 DSH Go）。全部成功 = 问题在 DSH 一侧（超时/并发排队）；间歇失败 = 网关或上游问题。",
+            "直接发出 3 次短请求，测量真实首内容、首正文和完整结束，每次最多 120 秒。测试会消耗所选模型的额度；成功仅说明这几次直连正常，不能排除间歇故障。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Button(
-            enabled = !busy && clientReady && currentGatewayKey != null && model != null,
-            onClick = {
-                val key = currentGatewayKey ?: return@Button
-                val id = model ?: return@Button
-                busy = true
-                lines = emptyList()
-                scope.launch(Dispatchers.IO) {
-                    val results = MagpieSelfTest.run(key, id) { stage -> lines = lines + stage }
-                    results.forEach { a ->
-                        lines = lines + (if (a.ok) "  ✓ #${a.status} ${a.millis}ms 首块=${a.firstChunk.take(80)}"
-                        else "  ✗ #${a.status} ${a.millis}ms ${a.error.take(160)}")
-                    }
-                    busy = false
-                }
-            },
-        ) { Text(if (busy) "测试中…" else "连续测试 3 次") }
-        if (!clientReady || currentGatewayKey == null || model == null) {
-            Text("需要网关运行、核心连接就绪且有可用模型。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.material3.OutlinedTextField(
+            value = model, onValueChange = { model = it }, enabled = !busy,
+            modifier = Modifier.fillMaxWidth(), label = { Text("测试模型 ID") }, singleLine = true,
+        )
+        TextButton(enabled = !busy && models.isNotEmpty(), onClick = { expanded = !expanded }) { Text("从可用模型中选择") }
+        if (expanded) models.forEach { id ->
+            TextButton(enabled = !busy, onClick = { model = id; expanded = false }) { Text(id) }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = !busy && clientReady && currentGatewayKey != null && model.isNotBlank(),
+                onClick = {
+                    val key = currentGatewayKey ?: return@Button
+                    val id = model.trim()
+                    busy = true
+                    lines = emptyList()
+                    scope.launch {
+                        try {
+                            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                probe.run(key, id) { stage -> scope.launch { lines = lines + stage } }
+                            }
+                        } finally { busy = false }
+                    }
+                },
+            ) { Text(if (busy) "测试中…" else "连续测试 3 次") }
+            if (busy) OutlinedButton(onClick = { scope.launch(Dispatchers.IO) { probe.cancel() } }) { Text("取消") }
+        }
+        if (!clientReady) Text("需要先启动网关并完成核心连接。", style = MaterialTheme.typography.bodySmall)
         lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 
@@ -304,29 +325,6 @@ private fun SelfTestPanel(
             )
         }
     }
-}
-
-@Composable
-private fun UsageContent(
-    clientReady: Boolean,
-    viewModel: UsageViewModel,
-    usageState: UsageUiState,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("用量", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.weight(1f))
-        TextButton(
-            enabled = clientReady && !usageState.loading,
-            onClick = {
-                viewModel.refresh(20)
-                viewModel.loadInsights()
-            },
-        ) { Text("刷新") }
-    }
-    UsageInsightsCard(clientReady = clientReady, viewModel = viewModel, usageState = usageState)
-    RecentRequestsCard(clientReady = clientReady, viewModel = viewModel, usageState = usageState)
-    ModelSpeedsCard(usageState = usageState)
-    CatalogCard(usageState = usageState)
 }
 
 private fun statusLabel(phase: GatewayEngineController.Phase): String = when (phase) {

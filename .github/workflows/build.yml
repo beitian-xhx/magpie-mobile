@@ -56,9 +56,14 @@ jobs:
       - name: Fetch verified Bun runtime
         run: bash scripts/fetch-assets.sh --bun-only
 
-      - name: Compile app Kotlin
+      - name: Verify bundled WorkBuddy mobile inference contract
+        run: node scripts/test-workbuddy-mobile.mjs
+
+      - name: Compile and test gateway and usage contracts
         run: |
           set -euo pipefail
+          gradle :core:test --no-daemon --stacktrace
+          gradle :app:testDebugUnitTest --tests '*UsageDashboardViewModelTest' --tests '*UsageViewModelTest' --no-daemon --stacktrace
           gradle :app:compileReleaseKotlin --no-daemon --stacktrace
 
       - name: Upload JVM regression reports even on failure

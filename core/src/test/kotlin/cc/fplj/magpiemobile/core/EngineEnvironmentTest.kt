@@ -17,7 +17,8 @@ class EngineEnvironmentTest {
         assertTrue(layout.cacheDir.isDirectory)
         assertTrue(layout.homeDir.isDirectory)
         assertEquals(EnginePaths.bunExecutable(layout).absolutePath, env["MAGPIE_BUN"])
-        assertEquals(setOf("HOME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "MAGPIE_BUN", "PATH"), env.keys)
+        assertEquals("1", env["MAGPIE_MOBILE"])
+        assertEquals(setOf("HOME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "MAGPIE_BUN", "MAGPIE_MOBILE", "PATH"), env.keys)
     }
 
     @Test fun existingDirectoriesAreReusable() {

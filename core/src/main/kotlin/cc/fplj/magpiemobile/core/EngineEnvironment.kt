@@ -15,6 +15,7 @@ object EngineEnvironment {
             "XDG_CONFIG_HOME" to layout.configDir.absolutePath,
             "XDG_CACHE_HOME" to layout.cacheDir.absolutePath,
             "MAGPIE_BUN" to EnginePaths.bunExecutable(layout).absolutePath,
+            "MAGPIE_MOBILE" to "1",
             "PATH" to "/system/bin:/system/xbin",
         )
     }

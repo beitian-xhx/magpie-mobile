@@ -73,9 +73,30 @@ class CoreManagementClient(
 
     /** GET /api/usage (upstream 54dc257f usage.go usageState(period, zone)): aggregate usage state. Raw JSON. */
     fun usageSummary(period: String = ""): String {
-        require(period.isEmpty() || period in setOf("today", "week", "month", "all")) { "period 仅允许 today/week/month/all" }
-        val suffix = if (period.isEmpty()) "" else "?period=" + period
+        require(period.isEmpty() || period in setOf("today", "7d", "30d", "week", "month", "all")) { "period 仅允许 today/7d/30d/all" }
+        val actual = when (period) { "week" -> "7d"; "month" -> "30d"; else -> period }
+        val suffix = if (actual.isEmpty()) "" else "?period=" + actual
         return transport.request("GET", "/api/usage" + suffix)
+    }
+
+    fun usageOverview(query: UsageQuery): UsageOverview = decode {
+        UsageDashboardParser.overview(transport.request("GET", "/api/usage?" + UsageQuery(period = query.period, zone = query.zone).parameters()))
+    }
+
+    fun usageLedger(query: UsageQuery, offset: Int = 0): UsageLedger = decode {
+        UsageDashboardParser.ledger(transport.request("GET", "/api/usage/requests?" + query.parameters(offset)))
+    }
+
+    fun usageQuotas(asked: Boolean = false): List<QuotaCardData> = decode {
+        UsageDashboardParser.quotas(transport.request("GET", "/api/usage/quotas" + if (asked) "?asked=1&all=1" else ""))
+    }
+
+    fun usageHeatmap(query: UsageQuery): List<HeatDayData> = decode {
+        UsageDashboardParser.heatmap(transport.request("GET", "/api/usage/heatmap?" + query.copy(day = "").parameters()))
+    }
+
+    fun usageQuotaHistory(): List<QuotaHistoryData> = decode {
+        UsageDashboardParser.history(transport.request("GET", "/api/usage/quotas/history?days=7"))
     }
 
     /** Exactly one add-key POST, sending only name. The core generates 24 bytes (48 hex).
@@ -179,6 +200,8 @@ class CoreManagementClient(
 
     private fun <T> decode(block: () -> T): T = try {
         block()
+    } catch (e: ManagementException) {
+        throw e
     } catch (_: Exception) {
         // Serialization errors can quote the response (including secrets). Never chain them.
         throw ManagementProtocolException()
@@ -320,6 +343,7 @@ private data class CopyCallerKey(val key: String)
 
 open class ManagementException internal constructor(message: String) : RuntimeException(message)
 class ManagementHttpException(val httpCode: Int, val safeErrorCode: String? = null) : ManagementException("管理请求失败：HTTP $httpCode")
+class ManagementReadException(reason: String) : ManagementException("管理读取失败：$reason")
 class ManagementExecutionUnknown : ManagementException("管理请求执行结果未知；不得重放写请求，请重新只读核对密钥列表")
 class ManagementProtocolException : ManagementException("管理响应格式无效或超过安全上限")
 class ManagementCapabilitiesMismatch : ManagementException("核心移动安全能力不兼容；拒绝注册密钥")
@@ -417,8 +441,14 @@ internal class BoundedCoreHttp(
                 out.toByteArray()
             }
             return bytes.toString(Charsets.UTF_8)
-        } catch (_: IOException) {
-            // Native/JDK errors may quote addresses, headers or bodies: no original cause retained.
+        } catch (e: IOException) {
+            // Writes may have committed: never replay them. Reads have no execution ambiguity.
+            // Keep a useful category without retaining addresses, headers or response bodies.
+            if (method == "GET") throw ManagementReadException(when (e) {
+                is java.net.SocketTimeoutException -> "读取超时"
+                is java.net.ConnectException -> "无法连接本机网关"
+                else -> "连接中断（${e.javaClass.simpleName}）"
+            })
             throw ManagementExecutionUnknown()
         } catch (e: ManagementProtocolException) {
             if (method == "POST") throw ManagementExecutionUnknown()

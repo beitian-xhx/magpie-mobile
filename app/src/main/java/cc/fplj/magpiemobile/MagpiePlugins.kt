@@ -28,7 +28,7 @@ object MagpiePlugins {
     private data class Bundled(val pkg: String, val asset: String, val version: String)
 
     private val BUNDLED = listOf(
-        Bundled(WORKBUDDY, "workbuddy", "0.2.33"),
+        Bundled(WORKBUDDY, "workbuddy", "0.2.33-mobile.1"),
         Bundled(QODER, "qoder", "0.2.67"),
     )
 

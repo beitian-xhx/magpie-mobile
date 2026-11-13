@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import cc.fplj.magpiemobile.core.EngineCommand
 import cc.fplj.magpiemobile.core.EngineEnvironment
@@ -25,6 +26,7 @@ import java.net.Socket
 /** A foreground owner, with process lifecycle handled by the regression-tested controller. */
 class GatewayService : Service() {
     private var controller: GatewayEngineController? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     private var owner = 0L
     @Volatile private var foregroundReady = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -46,6 +48,11 @@ class GatewayService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
             foregroundReady = true
+            // FGS alone does not keep the CPU running after screen-off.
+            // Owned only while the user's local gateway service exists.
+            wakeLock = getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Magpie:Gateway")
+                .apply { setReferenceCounted(false); acquire() }
         } catch (e: Exception) {
             report(GatewayEngineController.Status(
                 GatewayEngineController.Phase.FAILED,
@@ -192,6 +199,8 @@ class GatewayService : Service() {
                 GatewayRuntime.cleanupCompleted(stoppedOwner)
             }
         }, "MagpieStopCleanup").apply { isDaemon = true; start() }
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
         foregroundReady = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         try {
