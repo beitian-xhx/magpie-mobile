@@ -36,6 +36,9 @@ object MagpiePlugins {
     data class LoginResult(val ok: Boolean, val output: String)
     data class BunCheck(val ok: Boolean, val detail: String)
 
+    @Volatile
+    private var activeLogin: Process? = null
+
     fun checkBun(layout: EnginePaths.Layout): BunCheck {
         val bun = EnginePaths.bunExecutable(layout)
         if (!bun.isFile) return BunCheck(false, "Bun 载荷不存在")
@@ -167,16 +170,23 @@ object MagpiePlugins {
         }
     }
 
+    /**
+     * Browser account sign-in. The CLI prints the sign-in URL on its own line;
+     * we watch the output, hand that URL to the app (which opens it with an
+     * ACTION_VIEW Intent), then wait while the plugin polls the vendor in the
+     * background ("auto" method -- nothing is pasted back).
+     */
     fun login(
         context: Context,
         layout: EnginePaths.Layout,
         provider: String,
         method: String?,
-        secret: String,
         onStage: (String) -> Unit = {},
+        onBrowserUrl: (String) -> Unit = {},
     ): LoginResult {
         var logFile: File? = null
         var process: Process? = null
+        var watcher: Thread? = null
         return try {
             onStage("正在检查内置插件…")
             ensureInstalled(context, layout)
@@ -196,9 +206,8 @@ object MagpiePlugins {
             val environment = builder.environment()
             environment.clear()
             environment.putAll(EngineEnvironment.prepare(layout))
-            // The Go CLI's Android browser opener expects termux-open-url. The
-            // app has no Termux; a quiet no-op keeps PAT login from waiting on
-            // (or erroring over) a browser jump it does not need.
+            // The Go CLI opens Android URLs with termux-open-url. Keep it a
+            // no-op here: the app opens the URL with an Intent instead.
             val shimDir = File(layout.homeDir, "bin").apply { mkdirs() }
             val browserShim = File(shimDir, "termux-open-url")
             if (!browserShim.isFile) {
@@ -209,28 +218,55 @@ object MagpiePlugins {
             environment["SSL_CERT_DIR"] = "/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts"
             val started = builder.start()
             process = started
-            onStage("已启动，正在提交凭据…")
-            started.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(secret)
-                writer.newLine()
-            }
-            onStage("凭据已提交，等待插件返回（最长 90 秒）…")
-            val finished = started.waitFor(90, TimeUnit.SECONDS)
+            activeLogin = started
+            started.outputStream.close()
+            onStage("等待插件生成登录链接…")
+            watcher = Thread {
+                val ansi = Regex("\u001B\\[[0-9;]*[A-Za-z]")
+                while (!Thread.currentThread().isInterrupted) {
+                    try {
+                        val text = runCatching { outputFile.readText(Charsets.UTF_8) }.getOrDefault("")
+                        val lines = text.lines()
+                        val complete = if (text.endsWith("\n")) lines else lines.dropLast(1)
+                        var found = false
+                        for (line in complete) {
+                            val clean = ansi.replace(line, "").trim()
+                            if (clean.startsWith("https://") && !clean.any { it.isWhitespace() }) {
+                                onBrowserUrl(clean)
+                                found = true
+                                break
+                            }
+                        }
+                        if (found) break
+                        Thread.sleep(400)
+                    } catch (_: InterruptedException) {
+                        break
+                    } catch (_: Exception) {
+                        Thread.sleep(400)
+                    }
+                }
+            }.apply { isDaemon = true; start() }
+            val finished = started.waitFor(480, TimeUnit.SECONDS)
             if (!finished) {
                 stopProcessTree(started)
-                LoginResult(false, "登录超时（90 秒）。请确认网络可以访问供应商站点后重试。")
+                LoginResult(false, "登录超时。请在浏览器完成授权后切回 Magpie 等待，或重试。")
             } else {
                 onStage("已返回，正在读取登录结果…")
                 val output = runCatching { outputFile.readText(Charsets.UTF_8) }.getOrDefault("")
-                val safe = SecretRedactor.redact(output).replace(secret, "[REDACTED]")
-                LoginResult(started.exitValue() == 0, safe.takeLast(4000))
+                LoginResult(started.exitValue() == 0, SecretRedactor.redact(output).takeLast(4000))
             }
         } catch (e: Exception) {
             LoginResult(false, e.message ?: e.javaClass.simpleName)
         } finally {
+            watcher?.interrupt()
+            activeLogin = null
             process?.let { if (it.isAlive) stopProcessTree(it) }
             logFile?.delete()
         }
+    }
+
+    fun cancelLogin() {
+        activeLogin?.let { stopProcessTree(it) }
     }
 
     /** Stop the CLI and the Bun host it started; killing only the Go parent can orphan Bun. */

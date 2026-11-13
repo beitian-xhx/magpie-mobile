@@ -1,28 +1,25 @@
 package cc.fplj.magpiemobile
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 /**
- * PC-style black-and-white account panel. Feedback for each action is rendered
- * immediately underneath its own button, so it is visible without scrolling
- * back to the top of the long page.
+ * PC-style black-and-white account panel. Sign in with the WorkBuddy / Qoder
+ * account you already have -- no API key or PAT. Feedback appears directly
+ * underneath its own button.
  */
 @Composable
 internal fun MagpieProvidersCard(
@@ -31,14 +28,17 @@ internal fun MagpieProvidersCard(
     gatewayActive: Boolean,
 ) {
     var workbuddyProvider by remember { mutableStateOf("workbuddy") }
-    var workbuddyKey by remember { mutableStateOf("") }
     var qoderProvider by remember { mutableStateOf("qoder") }
-    var qoderPat by remember { mutableStateOf("") }
 
     MonoPanel("Accounts / 账号接入") {
         Text(
-            if (gatewayActive) "网关正在运行。建议先停止网关再登录；写入凭据后必须重启网关才会生效。"
-            else "网关已停止，可以登录。登录成功后启动网关，模型会出现在下方列表。",
+            "点击后用系统浏览器登录你已有的 WorkBuddy / Qoder 账号并授权，插件会自动完成登录；无需 API Key。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            if (gatewayActive) "网关正在运行。建议先停止网关；登录完成后重启网关生效。"
+            else "网关已停止。登录完成后启动网关，模型会出现在下方列表。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -63,22 +63,15 @@ internal fun MagpieProvidersCard(
                 label = { Text("国际版") },
             )
         }
-        OutlinedTextField(
-            value = workbuddyKey,
-            onValueChange = { workbuddyKey = it },
-            label = { Text("WorkBuddy API Key") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
         Button(
             enabled = !state.busy,
             onClick = {
-                viewModel.loginWorkbuddy(workbuddyProvider, workbuddyKey)
-                workbuddyKey = ""
+                val label = if (workbuddyProvider == "workbuddy") "WorkBuddy account (browser)"
+                else "WorkBuddy AI account (browser)"
+                viewModel.loginBrowser("workbuddy", workbuddyProvider, label)
             },
         ) {
-            Text(if (state.busy && state.action == "workbuddy") "处理中…" else "登录 WorkBuddy")
+            Text(if (state.busy && state.action == "workbuddy") "处理中…" else "用 WorkBuddy 账号登录")
         }
         if (state.action == "workbuddy") {
             LoginFeedback(state)
@@ -98,26 +91,20 @@ internal fun MagpieProvidersCard(
                 label = { Text("国服") },
             )
         }
-        OutlinedTextField(
-            value = qoderPat,
-            onValueChange = { qoderPat = it },
-            label = { Text("Qoder PAT") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
         Button(
             enabled = !state.busy,
             onClick = {
-                val method = if (qoderProvider == "qoder") "Sign in with Qoder PAT" else "Sign in with Qoder CN PAT"
-                viewModel.loginQoder(qoderProvider, method, qoderPat)
-                qoderPat = ""
+                val label = if (qoderProvider == "qoder") "Sign in with Qoder" else "Sign in with Qoder CN"
+                viewModel.loginBrowser("qoder", qoderProvider, label)
             },
         ) {
-            Text(if (state.busy && state.action == "qoder") "处理中…" else "登录 Qoder")
+            Text(if (state.busy && state.action == "qoder") "处理中…" else "用 Qoder 账号登录")
         }
         if (state.action == "qoder") {
             LoginFeedback(state)
+        }
+        if (state.busy) {
+            TextButton(onClick = viewModel::cancelLogin) { Text("取消登录") }
         }
     }
 }

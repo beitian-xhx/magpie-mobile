@@ -1,5 +1,6 @@
 package cc.fplj.magpiemobile
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -180,6 +181,13 @@ private fun RoutingContent(
             style = MaterialTheme.typography.titleSmall,
         )
         Text(gateway.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (Build.SUPPORTED_ABIS.firstOrNull()?.startsWith("x86") == true) {
+            Text(
+                "当前是 x86 模拟器：Magpie 核心为 ARM64，会以 code 132 (SIGILL) 退出，网关无法启动。请在真 arm64 手机上使用。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         if (notificationNotice.isNotEmpty()) {
             Text(notificationNotice, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = onAllowNotifications) { Text("允许通知") }

@@ -1,6 +1,8 @@
 package cc.fplj.magpiemobile
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cc.fplj.magpiemobile.core.EnginePaths
@@ -25,13 +27,12 @@ data class MagpieProvidersUiState(
 )
 
 /**
- * WorkBuddy is saved by writing Magpie's plugin-auth.json directly (no child
- * process, no browser, no network). Qoder PAT still needs the CLI because the
- * PAT must be exchanged for a job token online.
+ * Browser account sign-in for WorkBuddy / Qoder subscriptions. No API key or
+ * PAT is needed: the CLI prints a sign-in URL, the app opens it in the system
+ * browser, and the plugin polls the vendor until the account is authorized.
  *
- * Every result is tied to [MagpieProvidersUiState.action] so the UI can show
- * it directly underneath the button that was pressed, not at the top of a
- * long scrolling card.
+ * Results are tied to [MagpieProvidersUiState.action] so they appear directly
+ * underneath the button that was pressed.
  */
 class MagpieProvidersViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(MagpieProvidersUiState())
@@ -62,8 +63,15 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
         }
     }
 
-    fun showError(action: String, message: String) {
-        mutable.update { it.copy(action = action, notice = "", error = message) }
+    private fun openBrowser(url: String, onStage: (String) -> Unit) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(intent)
+            onStage("已打开浏览器。请登录并授权，然后切回 Magpie 等待完成…")
+        } catch (e: Exception) {
+            onStage("无法自动打开浏览器：" + (e.message ?: e.javaClass.simpleName))
+        }
     }
 
     private inline fun runLogin(action: String, crossinline block: (EnginePaths.Layout, (String) -> Unit) -> MagpiePlugins.LoginResult) {
@@ -88,7 +96,7 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
                         busy = false,
                         stage = "",
                         notice = if (result.ok) result.output else "",
-                        error = if (result.ok) "" else result.output.ifBlank { "登录失败，请检查 Key/PAT 与网络。" },
+                        error = if (result.ok) "" else result.output.ifBlank { "登录失败，请检查网络与账号状态。" },
                     )
                 }
             } finally {
@@ -97,23 +105,20 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
         }
     }
 
-    fun loginWorkbuddy(provider: String, key: String) {
-        if (key.isBlank()) {
-            showError("workbuddy", "请输入 WorkBuddy API Key。")
-            return
-        }
-        runLogin("workbuddy") { layout, onStage ->
-            MagpiePlugins.writeApiKey(getApplication<Application>(), layout, provider, key, onStage)
+    fun loginBrowser(action: String, provider: String, method: String) {
+        runLogin(action) { layout, onStage ->
+            MagpiePlugins.login(
+                context = getApplication<Application>(),
+                layout = layout,
+                provider = provider,
+                method = method,
+                onStage = onStage,
+                onBrowserUrl = { url -> openBrowser(url, onStage) },
+            )
         }
     }
 
-    fun loginQoder(provider: String, method: String, pat: String) {
-        if (pat.isBlank()) {
-            showError("qoder", "请输入 Qoder PAT。")
-            return
-        }
-        runLogin("qoder") { layout, onStage ->
-            MagpiePlugins.login(getApplication<Application>(), layout, provider, method, pat, onStage)
-        }
+    fun cancelLogin() {
+        MagpiePlugins.cancelLogin()
     }
 }
