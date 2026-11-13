@@ -91,15 +91,10 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val appShell: AppShellViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-            val shell by appShell.state.collectAsStateWithLifecycle()
-            val dark = when (shell.theme) {
-                cc.fplj.magpiemobile.preferences.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
-                cc.fplj.magpiemobile.preferences.ThemeMode.LIGHT -> false
-                cc.fplj.magpiemobile.preferences.ThemeMode.DARK -> true
-            }
+            val dark = androidx.compose.foundation.isSystemInDarkTheme()
             MagpieTheme(darkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    Dashboard(
+                    MinimalDashboard(
                         layout = layout,
                         appShell = appShell,
                         notificationNotice = notificationNotice,

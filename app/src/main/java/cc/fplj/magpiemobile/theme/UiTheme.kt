@@ -9,140 +9,119 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cc.fplj.magpiemobile.R
 
 /**
- * Anthropic 风格设计令牌（anthropic-style-frontend-cn 技能 · Compose 适配 · 工具优先模式）。
- *
- * 设计语言：技术性 × 人文温度 —— 暖米色大地调基底、衬线/无衬线混排、
- * 唯一强调色陶土橙。管理工具界面保持信息密度优先，仅重设色彩/字体/圆角。
- * 字体：Lora（标题与正文，SIL OFL）、Poppins（UI/按钮/标签，SIL OFL），
- * 许可文本随包分发在 assets/licenses/。全应用零硬编码颜色，统一经 MaterialTheme 取用。
+ * PC Magpie 风格的黑白界面：
+ * 纯白/纯黑基底、黑色/白色主操作、细灰边框、无彩色强调、
+ * 系统无衬线字体、近直角卡片。只保留路由与用量两页时使用。
  */
 
-// —— 字体族 ——
-internal val Serif = FontFamily(
-    Font(R.font.lora, FontWeight.Normal),
-    Font(R.font.lora, FontWeight.Bold),
-)
-internal val SerifItalic = FontFamily(
-    Font(R.font.lora_italic, FontWeight.Normal),
-    Font(R.font.lora_italic, FontWeight.Bold),
-)
-internal val Sans = FontFamily(
-    Font(R.font.poppins, FontWeight.Normal),
-    Font(R.font.poppins, FontWeight.Medium),
-    Font(R.font.poppins, FontWeight.SemiBold),
-    Font(R.font.poppins, FontWeight.Bold),
-)
-internal val SansItalic = FontFamily(
-    Font(R.font.poppins_italic, FontWeight.Normal),
-)
+private val Ink = Color(0xFF111111)
+private val Paper = Color(0xFFFFFFFF)
+private val GrayLine = Color(0xFFD6D6D6)
+private val GrayLineSoft = Color(0xFFE8E8E8)
+private val GrayText = Color(0xFF5C5C5C)
+private val SoftGray = Color(0xFFF5F5F5)
+private val MutedRed = Color(0xFF8F1D1D)
 
-// —— 亮色令牌 ——
 private val LightColors = lightColorScheme(
-    primary = Color(0xFFD97757),              // 唯一强调色：陶土橙
-    onPrimary = Color(0xFFFCFAF5),
-    primaryContainer = Color(0xFFEBD3C5),
-    onPrimaryContainer = Color(0xFF3E2418),
-    secondary = Color(0xFF7A6F5D),            // 暖灰褐：次级动作
-    onSecondary = Color(0xFFFCFAF5),
-    secondaryContainer = Color(0xFFE7E0D2),
-    onSecondaryContainer = Color(0xFF2A261E),
-    tertiary = Color(0xFF5C7265),             // 鼠尾草绿：图表/次强调
-    onTertiary = Color(0xFFF5F3EC),
-    error = Color(0xFFC0453A),                // 危险操作强调
-    onError = Color(0xFFF5F3EC),
-    errorContainer = Color(0xFFF1D4CF),
-    onErrorContainer = Color(0xFF3B1210),
-    background = Color(0xFFECE9E0),           // 页面基底：暖米色，不用纯白
-    onBackground = Color(0xFF141413),
-    surface = Color(0xFFECE9E0),
-    onSurface = Color(0xFF141413),
-    surfaceVariant = Color(0xFFE1DDD1),
-    onSurfaceVariant = Color(0xFF6B6860),
-    surfaceContainerLowest = Color(0xFFF7F5EE),
-    surfaceContainerLow = Color(0xFFF5F3EC),  // 卡片/面板抬升色
-    surfaceContainer = Color(0xFFF0EDE3),
-    surfaceContainerHigh = Color(0xFFECE8DD),
-    surfaceContainerHighest = Color(0xFFE6E2D6),
-    inverseSurface = Color(0xFF141413),       // 深色反相区块
-    inverseOnSurface = Color(0xFFECE9E0),
-    inversePrimary = Color(0xFFE08A69),
-    outline = Color(0xFFBFB9AC),
-    outlineVariant = Color(0xFFD8D4C8),
-    scrim = Color(0xFF141413),
+    primary = Ink,
+    onPrimary = Paper,
+    primaryContainer = Color(0xFFEDEDED),
+    onPrimaryContainer = Ink,
+    secondary = Color(0xFF444444),
+    onSecondary = Paper,
+    secondaryContainer = Color(0xFFEDEDED),
+    onSecondaryContainer = Ink,
+    tertiary = Color(0xFF444444),
+    onTertiary = Paper,
+    error = MutedRed,
+    onError = Paper,
+    errorContainer = Color(0xFFF4E4E4),
+    onErrorContainer = Color(0xFF3A0A0A),
+    background = Paper,
+    onBackground = Ink,
+    surface = Paper,
+    onSurface = Ink,
+    surfaceVariant = SoftGray,
+    onSurfaceVariant = GrayText,
+    surfaceContainerLowest = Paper,
+    surfaceContainerLow = Paper,
+    surfaceContainer = SoftGray,
+    surfaceContainerHigh = Color(0xFFEFEFEF),
+    surfaceContainerHighest = Color(0xFFE9E9E9),
+    inverseSurface = Ink,
+    inverseOnSurface = Paper,
+    inversePrimary = Color(0xFFE8E8E8),
+    outline = GrayLine,
+    outlineVariant = GrayLineSoft,
+    scrim = Ink,
 )
 
-// —— 暗色令牌 ——
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFE08A69),
-    onPrimary = Color(0xFF3B1F12),
-    primaryContainer = Color(0xFF6E3B26),
-    onPrimaryContainer = Color(0xFFF2D9CC),
-    secondary = Color(0xFFB5AE9D),
-    onSecondary = Color(0xFF2A261E),
-    secondaryContainer = Color(0xFF3E3A31),
-    onSecondaryContainer = Color(0xFFE7E0D2),
-    tertiary = Color(0xFFA4BCAE),
-    onTertiary = Color(0xFF1C2822),
-    error = Color(0xFFE0645A),
-    onError = Color(0xFF2A1210),
-    errorContainer = Color(0xFF5E2420),
-    onErrorContainer = Color(0xFFF1D4CF),
-    background = Color(0xFF141413),
-    onBackground = Color(0xFFECE9E0),
-    surface = Color(0xFF141413),
-    onSurface = Color(0xFFECE9E0),
-    surfaceVariant = Color(0xFF2A2825),
-    onSurfaceVariant = Color(0xFFA9A398),
-    surfaceContainerLowest = Color(0xFF191816),
-    surfaceContainerLow = Color(0xFF1E1C1A),
-    surfaceContainer = Color(0xFF23211E),
-    surfaceContainerHigh = Color(0xFF292722),
-    surfaceContainerHighest = Color(0xFF302D27),
-    inverseSurface = Color(0xFFECE9E0),
-    inverseOnSurface = Color(0xFF141413),
-    inversePrimary = Color(0xFFD97757),
-    outline = Color(0xFF57534A),
-    outlineVariant = Color(0xFF3A3731),
-    scrim = Color(0xFF0A0A09),
+    primary = Paper,
+    onPrimary = Color(0xFF0A0A0A),
+    primaryContainer = Color(0xFF262626),
+    onPrimaryContainer = Paper,
+    secondary = Color(0xFFCCCCCC),
+    onSecondary = Color(0xFF0A0A0A),
+    secondaryContainer = Color(0xFF242424),
+    onSecondaryContainer = Paper,
+    tertiary = Color(0xFFCCCCCC),
+    onTertiary = Color(0xFF0A0A0A),
+    error = Color(0xFFE08A8A),
+    onError = Color(0xFF1A0505),
+    errorContainer = Color(0xFF3A1414),
+    onErrorContainer = Color(0xFFF4DADA),
+    background = Color(0xFF0A0A0A),
+    onBackground = Color(0xFFF2F2F2),
+    surface = Color(0xFF0A0A0A),
+    onSurface = Color(0xFFF2F2F2),
+    surfaceVariant = Color(0xFF1A1A1A),
+    onSurfaceVariant = Color(0xFFA8A8A8),
+    surfaceContainerLowest = Color(0xFF0A0A0A),
+    surfaceContainerLow = Color(0xFF0A0A0A),
+    surfaceContainer = Color(0xFF161616),
+    surfaceContainerHigh = Color(0xFF1E1E1E),
+    surfaceContainerHighest = Color(0xFF262626),
+    inverseSurface = Color(0xFFF2F2F2),
+    inverseOnSurface = Color(0xFF0A0A0A),
+    inversePrimary = Color(0xFF222222),
+    outline = Color(0xFF3C3C3C),
+    outlineVariant = Color(0xFF2A2A2A),
+    scrim = Color(0xFF000000),
 )
 
-// —— 排版：标题/正文衬线（Lora），UI/按钮/标签无衬线（Poppins）——
-private val AnthropicTypography = Typography(
-    displayLarge = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 46.sp, lineHeight = 52.sp),
-    displayMedium = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 38.sp, lineHeight = 44.sp),
-    displaySmall = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 32.sp, lineHeight = 38.sp),
-    headlineLarge = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 30.sp, lineHeight = 36.sp),
-    headlineMedium = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 26.sp, lineHeight = 32.sp),
-    headlineSmall = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 22.sp, lineHeight = 28.sp),
-    titleLarge = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 20.sp, lineHeight = 26.sp),
-    titleMedium = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 22.sp),
-    titleSmall = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
-    bodyLarge = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 28.sp),
-    bodyMedium = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 22.sp),
-    bodySmall = TextStyle(fontFamily = Serif, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 18.sp),
-    labelLarge = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
-    labelMedium = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp),
-    labelSmall = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp),
+private val MonoType = Typography(
+    displayLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Normal, fontSize = 40.sp, lineHeight = 46.sp),
+    displayMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Normal, fontSize = 34.sp, lineHeight = 40.sp),
+    displaySmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 28.sp, lineHeight = 34.sp),
+    headlineLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 26.sp, lineHeight = 32.sp),
+    headlineMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 22.sp, lineHeight = 28.sp),
+    headlineSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 20.sp, lineHeight = 26.sp),
+    titleLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
+    titleMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 21.sp),
+    titleSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 19.sp),
+    bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 23.sp),
+    bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = 0.3.sp),
+    labelMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp, letterSpacing = 0.4.sp),
+    labelSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 10.sp, lineHeight = 14.sp, letterSpacing = 0.4.sp),
 )
 
-// —— 圆角：克制的中等圆角，管理界面保持信息密度 ——
-private val AnthropicShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+private val MonoShapes = Shapes(
+    extraSmall = RoundedCornerShape(0.dp),
+    small = RoundedCornerShape(2.dp),
+    medium = RoundedCornerShape(2.dp),
+    large = RoundedCornerShape(2.dp),
+    extraLarge = RoundedCornerShape(2.dp),
 )
 
-/** 应用统一主题入口：Anthropic 风格令牌 + 明暗双模式。 */
 @Composable
 fun MagpieTheme(
     darkTheme: Boolean,
@@ -150,8 +129,8 @@ fun MagpieTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = AnthropicTypography,
-        shapes = AnthropicShapes,
+        typography = MonoType,
+        shapes = MonoShapes,
         content = content,
     )
 }

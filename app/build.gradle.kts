@@ -13,8 +13,8 @@ android {
         applicationId = "cc.fplj.magpiemobile"
         minSdk = 29
         targetSdk = 35
-        versionCode = 39
-        versionName = "0.1.38-workbuddy-qoder"
+        versionCode = 40
+        versionName = "0.1.39-workbuddy-qoder-minimal"
         buildConfigField("String", "CORE_VERSION", "\"0.1.3781-mobile.1\"")
         buildConfigField("String", "GIT_SHA", "\"" + (System.getenv("GITHUB_SHA")?.take(8) ?: "local") + "\"")
     }
@@ -35,6 +35,7 @@ android {
             storePassword = System.getenv("MAGPIE_SIGNING_PASSWORD")
             keyAlias = "magpie"
             keyPassword = System.getenv("MAGPIE_SIGNING_PASSWORD")
+            storeType = "JKS"
         }
     }
     buildTypes {

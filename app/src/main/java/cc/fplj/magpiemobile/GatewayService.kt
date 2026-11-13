@@ -98,9 +98,12 @@ class GatewayService : Service() {
         controller = GatewayEngineController(
             launch = {
                 val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
-                val install = MagpiePlugins.ensureInstalled(applicationContext, layout)
-                if (install.warning.isNotBlank()) {
-                    Log.w("MagpieGateway", install.warning)
+                try {
+                    val install = MagpiePlugins.ensureInstalled(applicationContext, layout)
+                    if (install.warning.isNotBlank()) Log.w("MagpieGateway", install.warning)
+                } catch (e: Exception) {
+                    // A plugin asset problem must not stop the gateway core itself.
+                    Log.w("MagpieGateway", "内置插件预置失败，网关继续启动：" + (e.message ?: e.javaClass.simpleName))
                 }
                 val engineEnvironment = EngineEnvironment.prepare(layout) + mapOf(
                     "MAGPIE_WEB_KEY" to adminKey,

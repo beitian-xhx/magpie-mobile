@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # P0-2 CI：按官方哈希获取 Magpie CLI 与 Bun Android ARM64，放入 jniLibs。
+# Bun 1.4.3 contains the Android seccomp SIGSYS fixes (close_range/openat2/fchmodat2).
 # 镜像仅作传输通道，校验值来自官方（与 usemagpie.ai install.sh 的 mirror 机制同思路）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -7,9 +8,9 @@ DEST=app/src/main/jniLibs/arm64-v8a
 mkdir -p "$DEST" build-tmp
 
 MAGPIE_SHA256=62046ef27af15008363a850c55b234467615980377c7bcfc2ab0decf828fc195
-BUN_ZIP_SHA256=a1c7e2983f1bb65146beb256a4d72449f23042412bc2cf278aa6397ba27e0274
+BUN_ZIP_SHA256=e8848b6c67769ef1dcf932c1aabafbeaefdea0dd98f715e9455424998242deda
 MAGPIE_URL=https://github.com/yetone/magpie-releases/releases/download/v0.1.3622/magpie-cli-android-arm64
-BUN_URL=https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-aarch64-android.zip
+BUN_URL=https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/bun-linux-aarch64-android.zip
 
 fetch() { # fetch <out> <url>
   local out=$1 url=$2

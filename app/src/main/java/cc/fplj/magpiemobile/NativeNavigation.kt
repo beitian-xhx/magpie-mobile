@@ -180,7 +180,7 @@ fun Dashboard(
                         MagpieProvidersCard(
                             viewModel = magpieProvidersViewModel,
                             state = magpieProvidersState,
-                            enabled = !active && !stopping,
+                            gatewayActive = active,
                         )
                         McpServerCard(
                             viewModel = mcpViewModel,

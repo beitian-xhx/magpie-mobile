@@ -123,7 +123,19 @@ jobs:
             build-tmp/mobile-core-build-info.txt
           if-no-files-found: warn
 
+      - name: Restore signing key
+        env:
+          MAGPIE_SIGNING_KEY_B64: ${{ secrets.MAGPIE_SIGNING_KEY_B64 }}
+          MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$MAGPIE_SIGNING_KEY_B64" && test -n "$MAGPIE_SIGNING_PASSWORD"
+          printf '%s' "$MAGPIE_SIGNING_KEY_B64" | base64 --decode > "${RUNNER_TEMP:?}/magpie-release.jks"
+
       - name: Build release APK
+        env:
+          MAGPIE_SIGNING_STORE: ${{ runner.temp }}/magpie-release.jks
+          MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Verify APK signing

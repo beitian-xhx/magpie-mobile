@@ -3,7 +3,6 @@ package cc.fplj.magpiemobile
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import cc.fplj.magpiemobile.core.BunRuntimeInspector
 import cc.fplj.magpiemobile.core.EnginePaths
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 data class MagpieProvidersUiState(
     val bunReady: Boolean = false,
+    val bunDetail: String = "",
     val ready: Boolean = false,
     val busy: Boolean = false,
     val notice: String = "",
@@ -35,12 +35,13 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
     fun initialize(layout: EnginePaths.Layout) {
         this.layout = layout
         viewModelScope.launch(Dispatchers.IO) {
-            val bun = BunRuntimeInspector.inspect(layout)
+            val bun = MagpiePlugins.checkBun(layout)
             val result = runCatching { MagpiePlugins.ensureInstalled(getApplication<Application>(), layout) }
             val install = result.getOrNull()
             mutable.update {
                 it.copy(
-                    bunReady = bun.executable,
+                    bunReady = bun.ok,
+                    bunDetail = bun.detail,
                     ready = result.isSuccess,
                     notice = when {
                         install == null -> ""
@@ -52,6 +53,10 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
                 )
             }
         }
+    }
+
+    fun showError(message: String) {
+        mutable.update { it.copy(notice = "", error = message) }
     }
 
     fun login(provider: String, method: String, secret: String) {

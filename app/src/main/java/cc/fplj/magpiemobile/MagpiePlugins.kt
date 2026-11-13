@@ -34,6 +34,38 @@ object MagpiePlugins {
 
     data class InstallResult(val copied: Int, val settingsPath: String, val warning: String = "")
     data class LoginResult(val ok: Boolean, val output: String)
+    data class BunCheck(val ok: Boolean, val detail: String)
+
+    fun checkBun(layout: EnginePaths.Layout): BunCheck {
+        val bun = EnginePaths.bunExecutable(layout)
+        if (!bun.isFile) return BunCheck(false, "Bun 载荷不存在")
+        var logFile: File? = null
+        return try {
+            val output = File.createTempFile("magpie-bun-", ".log", layout.cacheDir)
+            logFile = output
+            val builder = ProcessBuilder(bun.absolutePath, "--version")
+                .directory(layout.homeDir)
+                .redirectErrorStream(true)
+                .redirectOutput(output)
+            val environment = builder.environment()
+            environment.clear()
+            environment.putAll(EngineEnvironment.prepare(layout))
+            val process = builder.start()
+            val finished = process.waitFor(10, TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                BunCheck(false, "Bun --version 超时")
+            } else {
+                val text = runCatching { output.readText(Charsets.UTF_8).trim() }.getOrDefault("")
+                if (process.exitValue() == 0) BunCheck(true, text.ifBlank { "ready" })
+                else BunCheck(false, "Bun exit=${process.exitValue()} " + text.take(200))
+            }
+        } catch (e: Exception) {
+            BunCheck(false, e.message ?: e.javaClass.simpleName)
+        } finally {
+            logFile?.delete()
+        }
+    }
 
     @Synchronized
     fun ensureInstalled(context: Context, layout: EnginePaths.Layout): InstallResult {

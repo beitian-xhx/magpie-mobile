@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -25,96 +24,106 @@ import androidx.compose.ui.unit.dp
 internal fun MagpieProvidersCard(
     viewModel: MagpieProvidersViewModel,
     state: MagpieProvidersUiState,
-    enabled: Boolean,
+    gatewayActive: Boolean,
 ) {
     var workbuddyProvider by remember { mutableStateOf("workbuddy") }
     var workbuddyKey by remember { mutableStateOf("") }
     var qoderProvider by remember { mutableStateOf("qoder") }
     var qoderPat by remember { mutableStateOf("") }
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("WorkBuddy / Qoder 模型接入", style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (enabled) "已内置 Magpie 官方 WorkBuddy 与 Qoder 插件。登录成功后重新启动网关，即可在模型列表中看到对应模型。"
-                else "网关正在运行或正在停止：请先停止网关并等待清理完成，再登录插件账号。",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+    MonoPanel("Accounts / 账号接入") {
+        Text(
+            if (gatewayActive) "网关正在运行。登录前请先在上方停止网关；否则登录按钮会提示。"
+            else "网关已停止，可以登录。登录成功后启动网关，模型会出现在下方列表。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            if (state.bunReady) "Bun runtime · " + state.bunDetail.ifBlank { "ready" }
+            else "Bun runtime · " + state.bunDetail.ifBlank { "unavailable" },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.bunReady) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text("WorkBuddy", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = workbuddyProvider == "workbuddy",
+                onClick = { workbuddyProvider = "workbuddy" },
+                label = { Text("国服") },
             )
-            Text(
-                if (state.bunReady) "Bun 插件运行时：就绪" else "Bun 插件运行时：未就绪（请确认安装的是 arm64 APK）",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (state.bunReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            FilterChip(
+                selected = workbuddyProvider == "workbuddy-ai",
+                onClick = { workbuddyProvider = "workbuddy-ai" },
+                label = { Text("国际版") },
             )
-            HorizontalDivider()
-            Text("WorkBuddy", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = workbuddyProvider == "workbuddy",
-                    onClick = { workbuddyProvider = "workbuddy" },
-                    label = { Text("国服") },
-                )
-                FilterChip(
-                    selected = workbuddyProvider == "workbuddy-ai",
-                    onClick = { workbuddyProvider = "workbuddy-ai" },
-                    label = { Text("国际版") },
-                )
-            }
-            OutlinedTextField(
-                value = workbuddyKey,
-                onValueChange = { workbuddyKey = it },
-                label = { Text("WorkBuddy API Key（/profile/keys 创建）") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
+        }
+        OutlinedTextField(
+            value = workbuddyKey,
+            onValueChange = { workbuddyKey = it },
+            label = { Text("WorkBuddy API Key") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            enabled = !state.busy,
+            onClick = {
+                when {
+                    gatewayActive -> viewModel.showError("请先停止网关并等待停止完成，再登录 WorkBuddy。")
+                    workbuddyKey.isBlank() -> viewModel.showError("请输入 WorkBuddy API Key。")
+                    else -> {
+                        viewModel.login(workbuddyProvider, "api", workbuddyKey)
+                        workbuddyKey = ""
+                    }
+                }
+            },
+        ) {
+            Text(if (state.busy) "登录中…" else "登录 WorkBuddy")
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text("Qoder", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = qoderProvider == "qoder",
+                onClick = { qoderProvider = "qoder" },
+                label = { Text("国际版") },
             )
-            Button(
-                enabled = enabled && !state.busy && workbuddyKey.isNotBlank(),
-                onClick = {
-                    viewModel.login(workbuddyProvider, "api", workbuddyKey)
-                    workbuddyKey = ""
-                },
-            ) {
-                Text(if (state.busy) "登录中…" else "登录 WorkBuddy")
-            }
-            HorizontalDivider()
-            Text("Qoder", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = qoderProvider == "qoder",
-                    onClick = { qoderProvider = "qoder" },
-                    label = { Text("国际版") },
-                )
-                FilterChip(
-                    selected = qoderProvider == "qoder-cn",
-                    onClick = { qoderProvider = "qoder-cn" },
-                    label = { Text("国服") },
-                )
-            }
-            OutlinedTextField(
-                value = qoderPat,
-                onValueChange = { qoderPat = it },
-                label = { Text("Qoder PAT（/account/integrations 创建）") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
+            FilterChip(
+                selected = qoderProvider == "qoder-cn",
+                onClick = { qoderProvider = "qoder-cn" },
+                label = { Text("国服") },
             )
-            Button(
-                enabled = enabled && !state.busy && qoderPat.isNotBlank(),
-                onClick = {
-                    val method = if (qoderProvider == "qoder") "Sign in with Qoder PAT" else "Sign in with Qoder CN PAT"
-                    viewModel.login(qoderProvider, method, qoderPat)
-                    qoderPat = ""
-                },
-            ) {
-                Text(if (state.busy) "登录中…" else "登录 Qoder")
-            }
-            if (state.notice.isNotEmpty()) {
-                Text(state.notice, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-            }
-            if (state.error.isNotEmpty()) {
-                Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
+        }
+        OutlinedTextField(
+            value = qoderPat,
+            onValueChange = { qoderPat = it },
+            label = { Text("Qoder PAT") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            enabled = !state.busy,
+            onClick = {
+                when {
+                    gatewayActive -> viewModel.showError("请先停止网关并等待停止完成，再登录 Qoder。")
+                    qoderPat.isBlank() -> viewModel.showError("请输入 Qoder PAT。")
+                    else -> {
+                        val method = if (qoderProvider == "qoder") "Sign in with Qoder PAT" else "Sign in with Qoder CN PAT"
+                        viewModel.login(qoderProvider, method, qoderPat)
+                        qoderPat = ""
+                    }
+                }
+            },
+        ) {
+            Text(if (state.busy) "登录中…" else "登录 Qoder")
+        }
+        if (state.notice.isNotEmpty()) {
+            Text(state.notice, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
+        }
+        if (state.error.isNotEmpty()) {
+            Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
