@@ -44,6 +44,15 @@ internal fun MagpieProvidersCard(
             style = MaterialTheme.typography.bodySmall,
             color = if (state.bunReady) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
         )
+        if (state.busy) {
+            Text("登录进度：" + state.stage.ifBlank { "处理中…" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+        }
+        if (state.notice.isNotEmpty()) {
+            Text(state.notice, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
+        }
+        if (state.error.isNotEmpty()) {
+            Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Text("WorkBuddy", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -118,15 +127,6 @@ internal fun MagpieProvidersCard(
             },
         ) {
             Text(if (state.busy) "登录中…" else "登录 Qoder")
-        }
-        if (state.busy && state.stage.isNotEmpty()) {
-            Text("登录进度：" + state.stage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (state.notice.isNotEmpty()) {
-            Text(state.notice, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
-        }
-        if (state.error.isNotEmpty()) {
-            Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
