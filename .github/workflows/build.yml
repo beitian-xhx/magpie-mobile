@@ -141,7 +141,7 @@ jobs:
       - name: Verify APK signing
         run: |
           set -euo pipefail
-          apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk | tee build-tmp/apk-signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | tee build-tmp/apk-signature.txt
 
       - name: Verify APK contains exactly the rebuilt core
         run: |

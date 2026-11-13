@@ -145,7 +145,7 @@ object MagpiePlugins {
 
     /** Stop the CLI and the Bun host it started; killing only the Go parent can orphan Bun. */
     private fun stopProcessTree(root: Process) {
-        val pid = runCatching { root.pid() }.getOrDefault(-1L)
+        val pid = processPid(root)
         if (pid <= 0L) {
             root.destroyForcibly()
             return
@@ -185,6 +185,13 @@ object MagpiePlugins {
 
     private fun signal(pid: Long, signal: Int) {
         runCatching { android.os.Process.sendSignal(pid.toInt(), signal) }
+    }
+
+    private fun processPid(process: Process): Long = try {
+        val value = Process::class.java.getMethod("pid").invoke(process)
+        (value as? Number)?.toLong() ?: -1L
+    } catch (_: Exception) {
+        -1L
     }
 
     private fun isPackageReady(target: File, expectedVersion: String): Boolean {

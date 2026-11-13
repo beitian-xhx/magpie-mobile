@@ -36,7 +36,7 @@ internal fun GatewayEndpointCard(
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                "协议：兼容 OpenAI API 标准规范（/v1/chat/completions 与 /v1/models）。手机本地其他 AI 客户端（如 Chatbox、NextChat、OpenCat 等）配置此 Base URL 即可直接通过本网关调用。",
+                "协议：兼容 OpenAI API 标准规范（/v1/chat/completions 与 /v1/models）。在 DSH Go 中打开「设置 → 模型 → 添加渠道」，协议选 OpenAI，Base URL 填本页地址，API Key 粘贴下方复制的 Key，再点「获取模型」即可。",
                 style = MaterialTheme.typography.bodySmall
             )
             if (running) {
