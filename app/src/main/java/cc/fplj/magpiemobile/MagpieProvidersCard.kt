@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 internal fun MagpieProvidersCard(
     viewModel: MagpieProvidersViewModel,
     state: MagpieProvidersUiState,
+    enabled: Boolean,
 ) {
     var workbuddyProvider by remember { mutableStateOf("workbuddy") }
     var workbuddyKey by remember { mutableStateOf("") }
@@ -35,8 +36,10 @@ internal fun MagpieProvidersCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("WorkBuddy / Qoder 模型接入", style = MaterialTheme.typography.titleMedium)
             Text(
-                "已内置 Magpie 官方 WorkBuddy 与 Qoder 插件。登录前请先停止网关；登录成功后重新启动网关，即可在模型列表中看到对应模型。",
+                if (enabled) "已内置 Magpie 官方 WorkBuddy 与 Qoder 插件。登录成功后重新启动网关，即可在模型列表中看到对应模型。"
+                else "网关正在运行或正在停止：请先停止网关并等待清理完成，再登录插件账号。",
                 style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
             )
             Text(
                 if (state.bunReady) "Bun 插件运行时：就绪" else "Bun 插件运行时：未就绪（请确认安装的是 arm64 APK）",
@@ -66,7 +69,7 @@ internal fun MagpieProvidersCard(
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
-                enabled = !state.busy && workbuddyKey.isNotBlank(),
+                enabled = enabled && !state.busy && workbuddyKey.isNotBlank(),
                 onClick = {
                     viewModel.login(workbuddyProvider, "api", workbuddyKey)
                     workbuddyKey = ""
@@ -97,7 +100,7 @@ internal fun MagpieProvidersCard(
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
-                enabled = !state.busy && qoderPat.isNotBlank(),
+                enabled = enabled && !state.busy && qoderPat.isNotBlank(),
                 onClick = {
                     val method = if (qoderProvider == "qoder") "Sign in with Qoder PAT" else "Sign in with Qoder CN PAT"
                     viewModel.login(qoderProvider, method, qoderPat)

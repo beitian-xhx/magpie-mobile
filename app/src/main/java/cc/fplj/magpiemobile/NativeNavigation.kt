@@ -127,7 +127,7 @@ fun Dashboard(
                                     Button(onClick = onAllowNotifications) { Text("允许通知") }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(enabled = !active, onClick = onStartGateway) { Text("启动网关") }
+                                    Button(enabled = !active && !magpieProvidersState.busy, onClick = onStartGateway) { Text("启动网关") }
                                     Button(enabled = active && !stopping, onClick = onStopGateway) { Text("停止网关") }
                                 }
                                 if (shell.preferences.ready) Text(when (shell.preferences.value.gatewayIntent) {
@@ -179,7 +179,8 @@ fun Dashboard(
                         )
                         MagpieProvidersCard(
                             viewModel = magpieProvidersViewModel,
-                            state = magpieProvidersState
+                            state = magpieProvidersState,
+                            enabled = !active && !stopping,
                         )
                         McpServerCard(
                             viewModel = mcpViewModel,

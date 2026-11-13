@@ -29,6 +29,7 @@ object MagpiePlugins {
     data class InstallResult(val copied: Int, val settingsPath: String)
     data class LoginResult(val ok: Boolean, val output: String)
 
+    @Synchronized
     fun ensureInstalled(context: Context, layout: EnginePaths.Layout): InstallResult {
         EngineEnvironment.prepare(layout)
         val settingsDir = File(layout.configDir, "magpie")
@@ -37,7 +38,14 @@ object MagpiePlugins {
         for ((pkg, asset) in BUNDLED) {
             val target = File(nodeModules, pkg)
             if (!File(target, "package.json").isFile) {
-                copyAssetTree(context, "magpie-plugins/$asset", target)
+                val staging = File(nodeModules, pkg + ".staging")
+                if (staging.exists()) staging.deleteRecursively()
+                copyAssetTree(context, "magpie-plugins/$asset", staging)
+                if (target.exists()) target.deleteRecursively()
+                if (!staging.renameTo(target)) {
+                    staging.copyRecursively(target, overwrite = true)
+                    staging.deleteRecursively()
+                }
                 copied++
             }
         }
@@ -60,7 +68,12 @@ object MagpiePlugins {
             }
         }
         listFile.parentFile?.mkdirs()
-        listFile.writeText(root.toString(2), Charsets.UTF_8)
+        val temporary = File(settingsDir, "plugins.json.tmp")
+        temporary.writeText(root.toString(2), Charsets.UTF_8)
+        if (!temporary.renameTo(listFile)) {
+            listFile.delete()
+            temporary.renameTo(listFile)
+        }
         return InstallResult(copied, listFile.absolutePath)
     }
 
@@ -71,41 +84,90 @@ object MagpiePlugins {
         method: String?,
         secret: String,
     ): LoginResult {
-        ensureInstalled(context, layout)
-        val executable = EnginePaths.magpieExecutable(layout)
-        if (!executable.isFile) {
-            return LoginResult(false, "核心载荷不存在：" + executable.absolutePath)
-        }
-        val command = mutableListOf(executable.absolutePath, "plugin", "login", provider)
-        if (!method.isNullOrBlank()) command.add(method)
-        val logFile = File.createTempFile("magpie-login-", ".log", layout.cacheDir)
+        var logFile: File? = null
+        var process: Process? = null
         return try {
+            ensureInstalled(context, layout)
+            val executable = EnginePaths.magpieExecutable(layout)
+            if (!executable.isFile) {
+                return LoginResult(false, "核心载荷不存在：" + executable.absolutePath)
+            }
+            val command = mutableListOf(executable.absolutePath, "plugin", "login", provider)
+            if (!method.isNullOrBlank()) command.add(method)
+            val outputFile = File.createTempFile("magpie-login-", ".log", layout.cacheDir)
+            logFile = outputFile
             val builder = ProcessBuilder(command)
                 .directory(layout.homeDir)
                 .redirectErrorStream(true)
-                .redirectOutput(logFile)
+                .redirectOutput(outputFile)
             val environment = builder.environment()
             environment.clear()
             environment.putAll(EngineEnvironment.prepare(layout))
             environment["SSL_CERT_DIR"] = "/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts"
-            val process = builder.start()
-            process.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+            val started = builder.start()
+            process = started
+            started.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(secret)
                 writer.newLine()
             }
-            val finished = process.waitFor(180, TimeUnit.SECONDS)
+            val finished = started.waitFor(180, TimeUnit.SECONDS)
             if (!finished) {
-                process.destroyForcibly()
+                stopProcessTree(started)
                 LoginResult(false, "登录超时（180 秒）。请确认网络可以访问供应商站点后重试。")
             } else {
-                val output = runCatching { logFile.readText(Charsets.UTF_8) }.getOrDefault("")
-                LoginResult(process.exitValue() == 0, output.takeLast(4000))
+                val output = runCatching { outputFile.readText(Charsets.UTF_8) }.getOrDefault("")
+                LoginResult(started.exitValue() == 0, output.takeLast(4000))
             }
         } catch (e: Exception) {
             LoginResult(false, e.message ?: e.javaClass.simpleName)
         } finally {
-            logFile.delete()
+            process?.let { if (it.isAlive) stopProcessTree(it) }
+            logFile?.delete()
         }
+    }
+
+    /** Stop the CLI and the Bun host it started; killing only the Go parent can orphan Bun. */
+    private fun stopProcessTree(root: Process) {
+        val pid = runCatching { root.pid() }.getOrDefault(-1L)
+        if (pid <= 0L) {
+            root.destroyForcibly()
+            return
+        }
+        val descendants = descendantsOf(pid)
+        descendants.asReversed().forEach { signal(it, 15) }
+        signal(pid, 15)
+        if (!runCatching { root.waitFor(3, TimeUnit.SECONDS) }.getOrDefault(false)) {
+            descendants.asReversed().forEach { signal(it, 9) }
+            signal(pid, 9)
+            runCatching { root.destroyForcibly() }
+        }
+    }
+
+    private fun descendantsOf(pid: Long): List<Long> {
+        val parents = HashMap<Long, MutableList<Long>>()
+        val entries = File("/proc").listFiles() ?: return emptyList()
+        for (entry in entries) {
+            val child = entry.name.toLongOrNull() ?: continue
+            val parent = runCatching {
+                File(entry, "status").useLines { lines ->
+                    lines.firstOrNull { it.startsWith("PPid:") }?.substringAfter(':')?.trim()?.toLongOrNull()
+                }
+            }.getOrNull() ?: continue
+            parents.getOrPut(parent) { mutableListOf() }.add(child)
+        }
+        val result = mutableListOf<Long>()
+        fun walk(parent: Long) {
+            parents[parent]?.forEach { child ->
+                result.add(child)
+                walk(child)
+            }
+        }
+        walk(pid)
+        return result
+    }
+
+    private fun signal(pid: Long, signal: Int) {
+        runCatching { android.os.Process.sendSignal(pid.toInt(), signal) }
     }
 
     private fun packageName(spec: String): String {

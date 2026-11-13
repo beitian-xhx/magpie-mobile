@@ -1,4 +1,4 @@
-﻿package cc.fplj.magpiemobile
+package cc.fplj.magpiemobile
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -56,7 +56,11 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
         }
         viewModelScope.launch(Dispatchers.IO) {
             mutable.update { it.copy(busy = true, notice = "", error = "") }
-            val result = MagpiePlugins.login(getApplication<Application>(), layout, provider, method, secret)
+            val result = try {
+                MagpiePlugins.login(getApplication<Application>(), layout, provider, method, secret)
+            } catch (e: Exception) {
+                MagpiePlugins.LoginResult(false, e.message ?: e.javaClass.simpleName)
+            }
             mutable.update {
                 it.copy(
                     busy = false,
