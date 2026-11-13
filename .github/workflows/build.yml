@@ -123,19 +123,7 @@ jobs:
             build-tmp/mobile-core-build-info.txt
           if-no-files-found: warn
 
-      - name: Generate build signing key
-        run: |
-          set -euo pipefail
-          keytool -genkeypair -keystore "${RUNNER_TEMP:?}/magpie-release.jks" -alias magpie \
-            -storepass magpie-mobile-build -keypass magpie-mobile-build \
-            -dname "CN=Magpie Mobile WorkBuddy Qoder" -keyalg RSA -keysize 2048 -validity 10000
-          echo "MAGPIE_SIGNING_STORE=${RUNNER_TEMP:?}/magpie-release.jks" >> "$GITHUB_ENV"
-          echo "MAGPIE_SIGNING_PASSWORD=magpie-mobile-build" >> "$GITHUB_ENV"
-
-      - name: Build fixed-signed release APK
-        env:
-          MAGPIE_SIGNING_STORE: ${{ runner.temp }}/magpie-release.jks
-          MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
+      - name: Build release APK
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Verify APK signing

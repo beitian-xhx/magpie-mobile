@@ -39,7 +39,11 @@ android {
     }
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("fixedRelease")
+            // This fork is distributed as a sideload build. Without a release
+            // keystore, sign with the debug key so the APK stays installable.
+            signingConfig = signingConfigs.getByName(
+                if (!System.getenv("MAGPIE_SIGNING_STORE").isNullOrBlank()) "fixedRelease" else "debug"
+            )
             isMinifyEnabled = false
             isDebuggable = false
         }
