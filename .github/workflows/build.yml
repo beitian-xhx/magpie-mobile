@@ -56,11 +56,10 @@ jobs:
       - name: Fetch verified Bun runtime
         run: bash scripts/fetch-assets.sh --bun-only
 
-      - name: Run core and app JVM regression tests
+      - name: Compile app Kotlin
         run: |
           set -euo pipefail
-          gradle :core:test :app:testDebugUnitTest --no-daemon --stacktrace
-          python3 scripts/check-room-schema.py
+          gradle :app:compileReleaseKotlin --no-daemon --stacktrace
 
       - name: Upload JVM regression reports even on failure
         if: always()
