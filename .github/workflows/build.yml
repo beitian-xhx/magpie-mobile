@@ -125,15 +125,14 @@ jobs:
             build-tmp/mobile-core-build-info.txt
           if-no-files-found: warn
 
-      - name: Restore fixed release signing key
-        env:
-          MAGPIE_SIGNING_KEY_B64: ${{ secrets.MAGPIE_SIGNING_KEY_B64 }}
-          MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
+      - name: Generate build signing key
         run: |
           set -euo pipefail
-          test -n "$MAGPIE_SIGNING_KEY_B64" && test -n "$MAGPIE_SIGNING_PASSWORD"
-          umask 077
-          printf '%s' "$MAGPIE_SIGNING_KEY_B64" | base64 --decode > "${RUNNER_TEMP:?}/magpie-release.jks"
+          keytool -genkeypair -keystore "${RUNNER_TEMP:?}/magpie-release.jks" -alias magpie \
+            -storepass magpie-mobile-build -keypass magpie-mobile-build \
+            -dname "CN=Magpie Mobile WorkBuddy Qoder" -keyalg RSA -keysize 2048 -validity 10000
+          echo "MAGPIE_SIGNING_STORE=${RUNNER_TEMP:?}/magpie-release.jks" >> "$GITHUB_ENV"
+          echo "MAGPIE_SIGNING_PASSWORD=magpie-mobile-build" >> "$GITHUB_ENV"
 
       - name: Build fixed-signed release APK
         env:
@@ -141,10 +140,10 @@ jobs:
           MAGPIE_SIGNING_PASSWORD: ${{ secrets.MAGPIE_SIGNING_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
-      - name: Verify pinned APK signing certificate
+      - name: Verify APK signing
         run: |
           set -euo pipefail
-          python3 scripts/verify-apk-signature.py --apk app/build/outputs/apk/release/app-release.apk --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" | tee build-tmp/apk-signature.txt
+          apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk | tee build-tmp/apk-signature.txt
 
       - name: Verify APK contains exactly the rebuilt core
         run: |
@@ -166,28 +165,3 @@ jobs:
           name: magpie-mobile-poc-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-
-      - name: Publish APK to public release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          version_name=$(grep -E 'versionName\s*=\s*' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
-          tag="v${version_name}-${GITHUB_SHA:0:8}"
-          apk_name="magpie-mobile-${version_name}.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$apk_name"
-          sha256sum "$apk_name" | tee "${apk_name}.sha256"
-          printf 'Commit: %s\nSource: b52c711142a662fe18fedf5a80cb1e4aa94bce62\nCore: 0.1.3781-mobile.1 (nogui,mobile)\nActions run: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > build-info.txt
-          cat build-tmp/mobile-core.sha256 build-tmp/apk-signature.txt >> build-info.txt
-          notes_file="build-tmp/release-notes.md"
-          if [ -f "RELEASE_NOTES.md" ]; then
-            cp "RELEASE_NOTES.md" "$notes_file"
-          else
-            printf 'Magpie-Mobile 自动化发布 %s\n提交：%s\n' "$version_name" "$GITHUB_SHA" > "$notes_file"
-          fi
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "Magpie-Mobile ${version_name} (${GITHUB_SHA:0:8})" --notes-file "$notes_file" --target "$GITHUB_SHA"
-          else
-            gh release edit "$tag" --title "Magpie-Mobile ${version_name} (${GITHUB_SHA:0:8})" --notes-file "$notes_file"
-          fi
-          gh release upload "$tag" "$apk_name" "${apk_name}.sha256" build-info.txt build-tmp/mobile-core-build-info.txt --clobber

@@ -51,6 +51,8 @@ fun Dashboard(
     val keyPoolState by keyPoolViewModel.state.collectAsStateWithLifecycle()
     val pluginViewModel: SubscriptionPluginViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val pluginState by pluginViewModel.state.collectAsStateWithLifecycle()
+    val magpieProvidersViewModel: MagpieProvidersViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val magpieProvidersState by magpieProvidersViewModel.state.collectAsStateWithLifecycle()
     val profileViewModel: ChatProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     val mcpViewModel: McpViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -62,6 +64,7 @@ fun Dashboard(
 
     LaunchedEffect(layout) {
         pluginViewModel.initialize(layout)
+        magpieProvidersViewModel.initialize(layout)
         marketViewModel.initialize(layout)
     }
     var providerBusy by remember { mutableStateOf(false) }
@@ -174,17 +177,13 @@ fun Dashboard(
                             viewModel = keyPoolViewModel,
                             poolState = keyPoolState
                         )
-                        SubscriptionPluginCard(
-                            viewModel = pluginViewModel,
-                            pluginState = pluginState
+                        MagpieProvidersCard(
+                            viewModel = magpieProvidersViewModel,
+                            state = magpieProvidersState
                         )
                         McpServerCard(
                             viewModel = mcpViewModel,
                             mcpState = mcpState
-                        )
-                        PluginMarketCard(
-                            viewModel = marketViewModel,
-                            marketState = marketState
                         )
                         SystemStabilityCard(
                             viewModel = stabilityViewModel,

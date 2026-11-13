@@ -36,6 +36,12 @@ class GatewayService : Service() {
         owner = GatewayRuntime.attach()
         NativeCoreSession.attach(owner, adminKey)
         try {
+            val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
+            MagpiePlugins.ensureInstalled(applicationContext, layout)
+        } catch (e: Exception) {
+            Log.w("MagpieGateway", "内置插件预置失败：" + (e.message ?: e.javaClass.simpleName))
+        }
+        try {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Magpie 网关", NotificationManager.IMPORTANCE_LOW),
             )

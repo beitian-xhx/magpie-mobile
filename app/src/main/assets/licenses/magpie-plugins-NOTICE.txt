@@ -1,0 +1,14 @@
+﻿Bundled Magpie provider plugins
+================================
+
+@magpie-community/opencode-workbuddy-auth 0.2.33
+  Source: https://github.com/magpie-community/plugins/tree/main/packages/workbuddy
+  License: MIT
+
+@magpie-community/opencode-qoder-auth 0.2.67
+  Source: https://github.com/magpie-community/plugins/tree/main/packages/qoder
+  License: MIT
+
+These packages are copied into the app's private Magpie config directory on
+first start and loaded by the embedded Magpie plugin host (Bun). They are not
+modified. See each package's package.json for its license field.
