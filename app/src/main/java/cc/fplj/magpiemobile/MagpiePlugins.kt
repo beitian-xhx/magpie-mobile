@@ -253,7 +253,15 @@ object MagpiePlugins {
             } else {
                 onStage("已返回，正在读取登录结果…")
                 val output = runCatching { outputFile.readText(Charsets.UTF_8) }.getOrDefault("")
-                LoginResult(started.exitValue() == 0, SecretRedactor.redact(output).takeLast(4000))
+                val exit = started.exitValue()
+                val detail = if (output.isBlank() && exit != 0) {
+                    "Magpie 登录进程退出码=$exit。" + when (exit) {
+                        132 -> "该设备不支持 ARM64 二进制（SIGILL）；请在真 arm64 手机上使用。"
+                        159 -> "Bun 被 Android seccomp 拦截（SIGSYS）；请确认安装的是含 Bun 1.4.4 的本版 APK。"
+                        else -> "请检查网络与账号状态后重试。"
+                    }
+                } else output
+                LoginResult(exit == 0, SecretRedactor.redact(detail).takeLast(4000))
             }
         } catch (e: Exception) {
             LoginResult(false, e.message ?: e.javaClass.simpleName)
