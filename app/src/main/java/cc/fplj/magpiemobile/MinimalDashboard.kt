@@ -86,7 +86,7 @@ fun MinimalDashboard(
     LaunchedEffect(page, clientReady, owner, lifecycle) {
         if (page == "usage" && clientReady) {
             lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                usageViewModel.refresh(asked = true)
+                usageViewModel.refresh()
                 while (true) {
                     kotlinx.coroutines.delay(10_000)
                     usageViewModel.refreshLocal()
@@ -268,6 +268,9 @@ private fun SelfTestPanel(
 ) {
     val scope = rememberCoroutineScope()
     val probe = remember { MagpieSelfTest() }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+        java.util.concurrent.CompletableFuture.runAsync { probe.cancel() }
+    }
     var busy by remember { mutableStateOf(false) }
     var lines by remember { mutableStateOf(listOf<String>()) }
     var model by rememberSaveable { mutableStateOf("") }

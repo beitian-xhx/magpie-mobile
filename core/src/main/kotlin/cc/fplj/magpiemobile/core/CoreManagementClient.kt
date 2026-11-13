@@ -87,8 +87,9 @@ class CoreManagementClient(
         UsageDashboardParser.ledger(transport.request("GET", "/api/usage/requests?" + query.parameters(offset)))
     }
 
-    fun usageQuotas(asked: Boolean = false): List<QuotaCardData> = decode {
-        UsageDashboardParser.quotas(transport.request("GET", "/api/usage/quotas" + if (asked) "?asked=1&all=1" else ""))
+    fun usageQuotas(asked: Boolean = false, all: Boolean = false): List<QuotaCardData> = decode {
+        val query = if (asked) "?asked=1" + if (all) "&all=1" else "" else ""
+        UsageDashboardParser.quotas(transport.request("GET", "/api/usage/quotas" + query))
     }
 
     fun usageHeatmap(query: UsageQuery): List<HeatDayData> = decode {

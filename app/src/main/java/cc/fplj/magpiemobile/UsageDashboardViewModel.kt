@@ -23,7 +23,7 @@ data class UsageDashboardState(
 class UsageDashboardViewModel(
     private val overviewReader: suspend (UsageQuery) -> UsageOverview = { NativeCoreSession.managementClient().usageOverview(it) },
     private val ledgerReader: suspend (UsageQuery, Int) -> UsageLedger = { q, n -> NativeCoreSession.managementClient().usageLedger(q, n) },
-    private val quotasReader: suspend (Boolean) -> List<QuotaCardData> = { NativeCoreSession.managementClient(Duration.ofSeconds(20)).usageQuotas(it) },
+    private val quotasReader: suspend (Boolean) -> List<QuotaCardData> = { NativeCoreSession.managementClient(Duration.ofSeconds(20)).usageQuotas(asked = true, all = it) },
     private val heatmapReader: suspend (UsageQuery) -> List<HeatDayData> = { NativeCoreSession.managementClient().usageHeatmap(it) },
     private val historyReader: suspend () -> List<QuotaHistoryData> = { NativeCoreSession.managementClient(Duration.ofSeconds(15)).usageQuotaHistory() },
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -31,14 +31,15 @@ class UsageDashboardViewModel(
     private val mutable = MutableStateFlow(UsageDashboardState())
     val state = mutable.asStateFlow()
     private var generation = 0L
+    private var sessionGeneration = 0L
     private val jobs = mutableMapOf<String, Job>()
 
     fun select(query: UsageQuery) {
         if (query == mutable.value.query) return
-        invalidate()
-        // Vendor quotas are independent of the ledger's period and filters.
+        invalidate(all = false)
+        // Vendor reads belong to the session, not the selected ledger query.
         val was = mutable.value
-        mutable.value = UsageDashboardState(query = query, quotas = was.quotas.copy(loading = false), history = was.history.copy(loading = false))
+        mutable.value = UsageDashboardState(query = query, quotas = was.quotas, history = was.history)
         refreshLocal()
         refreshHeatmap()
     }
@@ -65,7 +66,7 @@ class UsageDashboardViewModel(
 
     private fun refreshLedger() {
         val (q, offset) = mutable.value.let { it.query to it.offset }
-        load("ledger", { it.ledger }, { s, v -> s.copy(ledger = v) }) { ledgerReader(q, offset) }
+        load("ledger", { it.ledger }, { s, v -> s.copy(ledger = v, offset = v.data?.offset ?: s.offset) }) { ledgerReader(q, offset) }
     }
 
     private fun refreshHeatmap() {
@@ -86,10 +87,11 @@ class UsageDashboardViewModel(
         mutable.value = UsageDashboardState(query = mutable.value.query)
     }
 
-    private fun invalidate() {
+    private fun invalidate(all: Boolean = true) {
         generation++
-        jobs.values.forEach { it.cancel() }
-        jobs.clear()
+        if (all) sessionGeneration++
+        val names = if (all) jobs.keys.toList() else listOf("overview", "ledger", "heatmap")
+        names.forEach { jobs.remove(it)?.cancel() }
     }
 
     private fun <T> load(
@@ -98,15 +100,17 @@ class UsageDashboardViewModel(
         read: suspend () -> T,
     ) {
         if (get(mutable.value).loading) return
-        val own = generation
+        val shared = name == "quotas" || name == "history"
+        val own = if (shared) sessionGeneration else generation
+        fun isCurrent() = own == if (shared) sessionGeneration else generation
         mutable.update { set(it, get(it).copy(loading = true, error = "")) }
         jobs[name] = viewModelScope.launch {
             try {
                 val result = withContext(io) { read() }
-                if (own == generation) mutable.update { set(it, UsageSection(result, updatedAt = System.currentTimeMillis())) }
+                if (isCurrent()) mutable.update { set(it, UsageSection(result, updatedAt = System.currentTimeMillis())) }
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
-                if (own == generation) mutable.update { set(it, get(it).copy(loading = false, error = SecretRedactor.redact(e.message ?: e.javaClass.simpleName))) }
+                if (isCurrent()) mutable.update { set(it, get(it).copy(loading = false, error = SecretRedactor.redact(e.message ?: e.javaClass.simpleName))) }
             }
         }
     }

@@ -41,7 +41,7 @@ data class UsageNumbers(
 data class UsageGroupData(val id: String, val name: String, val provider: String, val model: String, val sub: String, val numbers: UsageNumbers)
 data class UsagePointData(val label: String, val time: String, val numbers: UsageNumbers)
 data class UsageOverview(val numbers: UsageNumbers, val models: List<UsageGroupData>, val accounts: List<UsageGroupData>, val agents: List<UsageGroupData>, val keys: List<UsageGroupData>, val series: List<UsagePointData>)
-data class UsageLedger(val requests: List<UsageRecord>, val total: Int, val numbers: UsageNumbers, val providers: List<Pair<String, String>>)
+data class UsageLedger(val requests: List<UsageRecord>, val total: Int, val numbers: UsageNumbers, val providers: List<Pair<String, String>>, val offset: Int = 0)
 data class QuotaWindowData(val name: String, val used: Double?, val unlimited: Boolean, val text: Boolean, val display: String, val amount: Double?, val limit: Double?, val unit: String, val balance: Double?, val resetsAt: String, val resetSecs: Long, val runsOutAt: String)
 data class QuotaCardData(val provider: String, val name: String, val user: String, val plan: String, val balance: String, val error: String, val readAt: String, val staleAt: String, val deferred: Boolean, val windows: List<QuotaWindowData>)
 data class HeatDayData(val date: String, val calls: Long, val tokens: Long)
@@ -71,7 +71,7 @@ object UsageDashboardParser {
     fun ledger(raw: String): UsageLedger {
         val o = objectOf(raw)
         if (o["rows"] !is JsonArray || (o["total"] as? JsonPrimitive)?.intOrNull == null) throw ManagementProtocolException()
-        return UsageLedger(UsageClient.parseUsageRecords(raw), o.n("total").toInt(), numbers(o), o.objects("providers").map { it.s("id") to it.s("name") })
+        return UsageLedger(UsageClient.parseUsageRecords(raw), o.n("total").toInt(), numbers(o), o.objects("providers").map { it.s("id") to it.s("name") }, o.n("offset").toInt())
     }
     fun quotas(raw: String): List<QuotaCardData> {
         val element = parse(raw)

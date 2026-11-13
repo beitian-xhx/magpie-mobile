@@ -23,7 +23,7 @@ class UsageFixtureActivity : ComponentActivity() {
         val quotas = UsageDashboardParser.quotas("""[{"provider":"workbuddy","name":"WorkBuddy","user":"sample-account","plan":"Free","readAt":"2026-11-13T16:00:00Z","windows":[{"name":"Credits","used":25.5,"amount":25.5,"limit":100,"unit":"credits","resetsAt":"2026-11-14T16:00:00Z"},{"name":"Daily status","text":true,"display":"Signed in"}]}]""")
         val rows = (1..20).map { UsageRecord(timestamp = "2026-11-13T16:00:00Z", model = "deepseek-v4.1-flash", provider = "workbuddy", statusCode = if (it == 2) 429 else 200, durationMs = 2200, inputTokens = 1200, outputTokens = 400, cacheRead = 18000, ttftMs = 900, firstTextMs = 1200, error = if (it == 2) "Vendor rate limit; try later" else "") }
         val vm = UsageDashboardViewModel(
-            overviewReader = { sample }, ledgerReader = { q, _ -> UsageLedger(if (q.failed) rows.filter { it.statusCode >= 400 } else rows, if (q.failed) 1 else 42, sample.numbers, listOf("workbuddy" to "WorkBuddy")) },
+            overviewReader = { sample }, ledgerReader = { q, offset -> UsageLedger(if (q.model.isNotBlank() && q.model != "deepseek-v4.1-flash") emptyList() else if (q.failed) rows.filter { it.statusCode >= 400 } else rows, if (q.failed) 1 else 42, sample.numbers, listOf("workbuddy" to "WorkBuddy"), offset) },
             quotasReader = { quotas }, heatmapReader = { (0..90).map { HeatDayData(LocalDate.now().minusDays(it.toLong()).toString(), (it % 7 + 1).toLong(), (it * 100).toLong()) } },
             historyReader = { listOf(QuotaHistoryData("workbuddy", "sample-account", "Credits", listOf("2026-11-12T16:00:00Z" to 95.0, "2026-11-13T16:00:00Z" to 74.5))) },
         )

@@ -31,6 +31,19 @@ class UsageDashboardViewModelTest {
         assertEquals("HTTP 503", model.state.value.quotas.error)
         assertEquals(1L, model.state.value.overview.data?.numbers?.calls)
     }
+    @Test fun changingPeriodKeepsInFlightQuotaReadButDisconnectCancelsIt() = runTest(dispatcher) {
+        var reads = 0
+        val model = vm(quotasRead = { reads++; delay(5000); emptyList() })
+        model.refresh(); runCurrent()
+        model.select(UsageQuery(period = "7d")); runCurrent()
+        assertTrue(model.state.value.quotas.loading)
+        advanceUntilIdle()
+        assertNotNull(model.state.value.quotas.data)
+        assertEquals(1, reads)
+        model.refreshQuotas(); runCurrent(); model.clear(); advanceUntilIdle()
+        assertNull(model.state.value.quotas.data)
+        assertFalse(model.state.value.quotas.loading)
+    }
     @Test fun queryChangeAndDisconnectCannotBeOverwrittenByOldRead() = runTest(dispatcher) {
         val model = vm(overviewRead = { q ->
             // Simulate an uncooperative blocking API.

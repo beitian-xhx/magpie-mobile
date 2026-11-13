@@ -55,7 +55,7 @@ class GatewayProbe(
             if (canceled) { conn.disconnect(); error("测试已取消") }
             clock.schedule({ expired.set(true); conn.disconnect() }, deadlineMs, TimeUnit.MILLISECONDS)
             val body = buildJsonObject {
-                put("model", model); put("stream", true); put("max_tokens", 32)
+                put("model", model); put("stream", true); put("max_tokens", 128)
                 putJsonArray("messages") { addJsonObject { put("role", "user"); put("content", "Reply with exactly: pong") } }
             }.toString().toByteArray(Charsets.UTF_8)
             conn.setFixedLengthStreamingMode(body.size)
@@ -112,6 +112,7 @@ class GatewayProbe(
                 if (payload.isNotEmpty()) event()
             }
             check(!canceled) { "测试已取消" }
+            check(firstText != null || !finished) { "上游流已结束但没有正文；可能是输出预算被推理耗尽，不能据此断定网关断线" }
             check(first != null) { "未收到文本、推理或工具内容；角色事件和保活不算回答" }
             check(firstText != null) { "只收到推理或工具事件，没有正文回答" }
             check(finished) { "连接提前结束，未收到完成标记" }

@@ -57,7 +57,7 @@ internal fun UsageDashboardContent(ready: Boolean, vm: UsageDashboardViewModel, 
     }
     state.overview.data?.let { overview ->
         GroupPanel("Models / 按模型", overview.models) { g ->
-            vm.select(state.query.copy(provider = g.provider, model = if (g.provider.isNotBlank() && g.model.isNotBlank()) "${g.provider}/${g.model}" else g.id))
+            vm.select(state.query.copy(provider = g.provider, model = g.model.ifBlank { g.id.substringAfter('/') }))
         }
         GroupPanel("Accounts / 按账号", overview.accounts)
         GroupPanel("Clients / 按客户端", overview.agents)
@@ -101,7 +101,7 @@ private fun Metric(label: String, value: String) {
 
 @Composable
 private fun <T> SectionStatus(section: UsageSection<T>) {
-    if (section.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    if (section.loading && section.data == null) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (section.error.isNotBlank()) Text(
         (if (section.data != null) "更新失败，保留上次读数：" else "读取失败：") + section.error,
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
@@ -196,7 +196,7 @@ private fun HeatmapContent(section: UsageSection<List<HeatDayData>>) {
             Text("近 53 周 · 周一至周日 · 色块越深请求越多", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 Canvas(Modifier.width(650.dp).height(90.dp).semantics { contentDescription = "53 周请求日历，共 ${days.sumOf { it.calls }} 次请求" }) {
-                    val cell = size.height / 7
+                    val cell = minOf(size.width / 53, size.height / 7)
                     dates.forEachIndexed { i, date ->
                         val calls = byDate[date.toString()]?.calls ?: 0
                         val alpha = if (calls == 0L) .07f else (.25 + .75 * calls / max).toFloat()
