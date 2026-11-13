@@ -125,6 +125,48 @@ object MagpiePlugins {
         return InstallResult(copied, listFile.absolutePath, warning)
     }
 
+    /**
+     * Write an "api" plugin credential directly, the exact shape Magpie's
+     * plugin host reads from plugin-auth.json. Verified against the desktop
+     * CLI: `magpie plugin login workbuddy api` produces
+     * {"workbuddy":{"type":"api","key":"..."}}.
+     *
+     * WorkBuddy needs no token exchange, so this avoids a Bun child process,
+     * a browser jump, and any network round-trip: it is immediate and works
+     * even while the gateway is failing to start.
+     */
+    @Synchronized
+    fun writeApiKey(
+        context: Context,
+        layout: EnginePaths.Layout,
+        provider: String,
+        key: String,
+        onStage: (String) -> Unit = {},
+    ): LoginResult {
+        return try {
+            onStage("正在检查内置插件…")
+            ensureInstalled(context, layout)
+            onStage("正在写入凭据…")
+            val settingsDir = File(layout.configDir, "magpie")
+            settingsDir.mkdirs()
+            val authFile = File(settingsDir, "plugin-auth.json")
+            val root = if (authFile.isFile) {
+                runCatching { JSONObject(authFile.readText(Charsets.UTF_8)) }.getOrElse { JSONObject() }
+            } else JSONObject()
+            root.put(provider, JSONObject().put("type", "api").put("key", key))
+            val temporary = File(settingsDir, "plugin-auth.json.tmp")
+            temporary.writeText(root.toString(2), Charsets.UTF_8)
+            if (!temporary.renameTo(authFile)) {
+                authFile.delete()
+                temporary.renameTo(authFile)
+            }
+            onStage("")
+            LoginResult(true, "已保存 $provider 凭据。请启动或重启网关，然后刷新模型列表。")
+        } catch (e: Exception) {
+            LoginResult(false, "写入凭据失败：" + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
     fun login(
         context: Context,
         layout: EnginePaths.Layout,

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -20,6 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
+/**
+ * PC-style black-and-white account panel. Feedback for each action is rendered
+ * immediately underneath its own button, so it is visible without scrolling
+ * back to the top of the long page.
+ */
 @Composable
 internal fun MagpieProvidersCard(
     viewModel: MagpieProvidersViewModel,
@@ -33,7 +37,7 @@ internal fun MagpieProvidersCard(
 
     MonoPanel("Accounts / 账号接入") {
         Text(
-            if (gatewayActive) "网关正在运行。登录前请先在上方停止网关；否则登录按钮会提示。"
+            if (gatewayActive) "网关正在运行。建议先停止网关再登录；写入凭据后必须重启网关才会生效。"
             else "网关已停止，可以登录。登录成功后启动网关，模型会出现在下方列表。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -44,16 +48,8 @@ internal fun MagpieProvidersCard(
             style = MaterialTheme.typography.bodySmall,
             color = if (state.bunReady) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
         )
-        if (state.busy) {
-            Text("登录进度：" + state.stage.ifBlank { "处理中…" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
-        }
-        if (state.notice.isNotEmpty()) {
-            Text(state.notice, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
-        }
-        if (state.error.isNotEmpty()) {
-            Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
         Text("WorkBuddy", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
@@ -78,18 +74,16 @@ internal fun MagpieProvidersCard(
         Button(
             enabled = !state.busy,
             onClick = {
-                when {
-                    gatewayActive -> viewModel.showError("请先停止网关并等待停止完成，再登录 WorkBuddy。")
-                    workbuddyKey.isBlank() -> viewModel.showError("请输入 WorkBuddy API Key。")
-                    else -> {
-                        viewModel.login(workbuddyProvider, "api", workbuddyKey)
-                        workbuddyKey = ""
-                    }
-                }
+                viewModel.loginWorkbuddy(workbuddyProvider, workbuddyKey)
+                workbuddyKey = ""
             },
         ) {
-            Text(if (state.busy) "登录中…" else "登录 WorkBuddy")
+            Text(if (state.busy && state.action == "workbuddy") "处理中…" else "登录 WorkBuddy")
         }
+        if (state.action == "workbuddy") {
+            LoginFeedback(state)
+        }
+
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Text("Qoder", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -115,18 +109,28 @@ internal fun MagpieProvidersCard(
         Button(
             enabled = !state.busy,
             onClick = {
-                when {
-                    gatewayActive -> viewModel.showError("请先停止网关并等待停止完成，再登录 Qoder。")
-                    qoderPat.isBlank() -> viewModel.showError("请输入 Qoder PAT。")
-                    else -> {
-                        val method = if (qoderProvider == "qoder") "Sign in with Qoder PAT" else "Sign in with Qoder CN PAT"
-                        viewModel.login(qoderProvider, method, qoderPat)
-                        qoderPat = ""
-                    }
-                }
+                val method = if (qoderProvider == "qoder") "Sign in with Qoder PAT" else "Sign in with Qoder CN PAT"
+                viewModel.loginQoder(qoderProvider, method, qoderPat)
+                qoderPat = ""
             },
         ) {
-            Text(if (state.busy) "登录中…" else "登录 Qoder")
+            Text(if (state.busy && state.action == "qoder") "处理中…" else "登录 Qoder")
         }
+        if (state.action == "qoder") {
+            LoginFeedback(state)
+        }
+    }
+}
+
+@Composable
+private fun LoginFeedback(state: MagpieProvidersUiState) {
+    if (state.stage.isNotBlank()) {
+        Text("登录进度：" + state.stage, style = MaterialTheme.typography.bodySmall)
+    }
+    if (state.notice.isNotBlank()) {
+        Text(state.notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+    }
+    if (state.error.isNotBlank()) {
+        Text(state.error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     }
 }

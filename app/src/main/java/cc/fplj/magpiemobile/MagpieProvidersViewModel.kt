@@ -17,15 +17,21 @@ data class MagpieProvidersUiState(
     val bunDetail: String = "",
     val ready: Boolean = false,
     val busy: Boolean = false,
+    /** Which provider section owns the current result: "workbuddy" or "qoder". */
+    val action: String = "",
     val stage: String = "",
     val notice: String = "",
     val error: String = "",
 )
 
 /**
- * Backs the WorkBuddy / Qoder account card.  The bundled plugin packages are
- * installed into the Go core's config directory; sign-in runs the core's own
- * `plugin login` command with the credential on stdin.
+ * WorkBuddy is saved by writing Magpie's plugin-auth.json directly (no child
+ * process, no browser, no network). Qoder PAT still needs the CLI because the
+ * PAT must be exchanged for a job token online.
+ *
+ * Every result is tied to [MagpieProvidersUiState.action] so the UI can show
+ * it directly underneath the button that was pressed, not at the top of a
+ * long scrolling card.
  */
 class MagpieProvidersViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(MagpieProvidersUiState())
@@ -56,33 +62,22 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
         }
     }
 
-    fun showError(message: String) {
-        mutable.update { it.copy(notice = "", error = message) }
+    fun showError(action: String, message: String) {
+        mutable.update { it.copy(action = action, notice = "", error = message) }
     }
 
-    fun login(provider: String, method: String, secret: String) {
+    private inline fun runLogin(action: String, crossinline block: (EnginePaths.Layout, (String) -> Unit) -> MagpiePlugins.LoginResult) {
         val layout = layout
         if (layout == null) {
-            mutable.update { it.copy(notice = "", error = "账号模块尚未初始化，请等待界面加载完成后重试。") }
-            return
-        }
-        if (secret.isBlank()) {
-            mutable.update { it.copy(notice = "", error = "请输入 API Key 或 PAT") }
+            mutable.update { it.copy(action = action, notice = "", error = "账号模块尚未初始化，请等待界面加载完成后重试。") }
             return
         }
         if (!loginGate.compareAndSet(false, true)) return
-        mutable.update { it.copy(busy = true, stage = "正在准备内置插件…", notice = "", error = "") }
+        mutable.update { it.copy(busy = true, action = action, stage = "正在准备…", notice = "", error = "") }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = try {
-                    MagpiePlugins.login(
-                        context = getApplication<Application>(),
-                        layout = layout,
-                        provider = provider,
-                        method = method,
-                        secret = secret,
-                        onStage = { text -> mutable.update { it.copy(stage = text) } },
-                    )
+                    block(layout) { text -> mutable.update { it.copy(stage = text) } }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -92,13 +87,33 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
                     it.copy(
                         busy = false,
                         stage = "",
-                        notice = if (result.ok) "登录成功：$provider。请重启网关后刷新模型列表。" else "",
+                        notice = if (result.ok) result.output else "",
                         error = if (result.ok) "" else result.output.ifBlank { "登录失败，请检查 Key/PAT 与网络。" },
                     )
                 }
             } finally {
                 loginGate.set(false)
             }
+        }
+    }
+
+    fun loginWorkbuddy(provider: String, key: String) {
+        if (key.isBlank()) {
+            showError("workbuddy", "请输入 WorkBuddy API Key。")
+            return
+        }
+        runLogin("workbuddy") { layout, onStage ->
+            MagpiePlugins.writeApiKey(getApplication<Application>(), layout, provider, key, onStage)
+        }
+    }
+
+    fun loginQoder(provider: String, method: String, pat: String) {
+        if (pat.isBlank()) {
+            showError("qoder", "请输入 Qoder PAT。")
+            return
+        }
+        runLogin("qoder") { layout, onStage ->
+            MagpiePlugins.login(getApplication<Application>(), layout, provider, method, pat, onStage)
         }
     }
 }
