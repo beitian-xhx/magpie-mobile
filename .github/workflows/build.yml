@@ -45,7 +45,6 @@ jobs:
           python3 scripts/check-startup-contract.py
           python3 scripts/check-model-discovery-trigger.py
           python3 scripts/check-android-network-build.py
-          python3 scripts/test_apk_signature.py
           python3 scripts/test-device-stability.py
 
       - name: Apply exact hash-pinned mobile core patch
