@@ -119,6 +119,9 @@ internal fun MagpieProvidersCard(
         ) {
             Text(if (state.busy) "登录中…" else "登录 Qoder")
         }
+        if (state.busy && state.stage.isNotEmpty()) {
+            Text("登录进度：" + state.stage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (state.notice.isNotEmpty()) {
             Text(state.notice, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
         }

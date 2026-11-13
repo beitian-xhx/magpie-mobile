@@ -88,7 +88,7 @@ fun MinimalDashboard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("MAGPIE", style = MaterialTheme.typography.titleLarge)
+                        Text("MAGPIE " + BuildConfig.VERSION_NAME, style = MaterialTheme.typography.titleLarge)
                         Spacer(Modifier.weight(1f))
                         Text(statusLabel(gateway.phase), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

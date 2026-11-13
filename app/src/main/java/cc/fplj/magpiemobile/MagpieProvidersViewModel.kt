@@ -17,6 +17,7 @@ data class MagpieProvidersUiState(
     val bunDetail: String = "",
     val ready: Boolean = false,
     val busy: Boolean = false,
+    val stage: String = "",
     val notice: String = "",
     val error: String = "",
 )
@@ -60,17 +61,28 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
     }
 
     fun login(provider: String, method: String, secret: String) {
-        val layout = layout ?: return
+        val layout = layout
+        if (layout == null) {
+            mutable.update { it.copy(notice = "", error = "账号模块尚未初始化，请等待界面加载完成后重试。") }
+            return
+        }
         if (secret.isBlank()) {
             mutable.update { it.copy(notice = "", error = "请输入 API Key 或 PAT") }
             return
         }
         if (!loginGate.compareAndSet(false, true)) return
-        mutable.update { it.copy(busy = true, notice = "", error = "") }
+        mutable.update { it.copy(busy = true, stage = "正在准备内置插件…", notice = "", error = "") }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = try {
-                    MagpiePlugins.login(getApplication<Application>(), layout, provider, method, secret)
+                    MagpiePlugins.login(
+                        context = getApplication<Application>(),
+                        layout = layout,
+                        provider = provider,
+                        method = method,
+                        secret = secret,
+                        onStage = { text -> mutable.update { it.copy(stage = text) } },
+                    )
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -79,6 +91,7 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
                 mutable.update {
                     it.copy(
                         busy = false,
+                        stage = "",
                         notice = if (result.ok) "登录成功：$provider。请重启网关后刷新模型列表。" else "",
                         error = if (result.ok) "" else result.output.ifBlank { "登录失败，请检查 Key/PAT 与网络。" },
                     )

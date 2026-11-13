@@ -131,15 +131,18 @@ object MagpiePlugins {
         provider: String,
         method: String?,
         secret: String,
+        onStage: (String) -> Unit = {},
     ): LoginResult {
         var logFile: File? = null
         var process: Process? = null
         return try {
+            onStage("正在检查内置插件…")
             ensureInstalled(context, layout)
             val executable = EnginePaths.magpieExecutable(layout)
             if (!executable.isFile) {
                 return LoginResult(false, "核心载荷不存在：" + executable.absolutePath)
             }
+            onStage("正在启动 Magpie 登录进程…")
             val command = mutableListOf(executable.absolutePath, "plugin", "login", provider)
             if (!method.isNullOrBlank()) command.add(method)
             val outputFile = File.createTempFile("magpie-login-", ".log", layout.cacheDir)
@@ -151,18 +154,31 @@ object MagpiePlugins {
             val environment = builder.environment()
             environment.clear()
             environment.putAll(EngineEnvironment.prepare(layout))
+            // The Go CLI's Android browser opener expects termux-open-url. The
+            // app has no Termux; a quiet no-op keeps PAT login from waiting on
+            // (or erroring over) a browser jump it does not need.
+            val shimDir = File(layout.homeDir, "bin").apply { mkdirs() }
+            val browserShim = File(shimDir, "termux-open-url")
+            if (!browserShim.isFile) {
+                browserShim.writeText("#!/system/bin/sh\nexit 0\n", Charsets.UTF_8)
+            }
+            browserShim.setExecutable(true, false)
+            environment["PATH"] = shimDir.absolutePath + ":/system/bin:/system/xbin"
             environment["SSL_CERT_DIR"] = "/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts"
             val started = builder.start()
             process = started
+            onStage("已启动，正在提交凭据…")
             started.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(secret)
                 writer.newLine()
             }
-            val finished = started.waitFor(180, TimeUnit.SECONDS)
+            onStage("凭据已提交，等待插件返回（最长 90 秒）…")
+            val finished = started.waitFor(90, TimeUnit.SECONDS)
             if (!finished) {
                 stopProcessTree(started)
-                LoginResult(false, "登录超时（180 秒）。请确认网络可以访问供应商站点后重试。")
+                LoginResult(false, "登录超时（90 秒）。请确认网络可以访问供应商站点后重试。")
             } else {
+                onStage("已返回，正在读取登录结果…")
                 val output = runCatching { outputFile.readText(Charsets.UTF_8) }.getOrDefault("")
                 val safe = SecretRedactor.redact(output).replace(secret, "[REDACTED]")
                 LoginResult(started.exitValue() == 0, safe.takeLast(4000))
