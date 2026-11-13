@@ -3,6 +3,7 @@ package cc.fplj.magpiemobile
 import android.content.Context
 import cc.fplj.magpiemobile.core.EngineEnvironment
 import cc.fplj.magpiemobile.core.EnginePaths
+import cc.fplj.magpiemobile.core.SecretRedactor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -24,9 +25,14 @@ object MagpiePlugins {
     const val WORKBUDDY = "@magpie-community/opencode-workbuddy-auth"
     const val QODER = "@magpie-community/opencode-qoder-auth"
 
-    private val BUNDLED = listOf(WORKBUDDY to "workbuddy", QODER to "qoder")
+    private data class Bundled(val pkg: String, val asset: String, val version: String)
 
-    data class InstallResult(val copied: Int, val settingsPath: String)
+    private val BUNDLED = listOf(
+        Bundled(WORKBUDDY, "workbuddy", "0.2.33"),
+        Bundled(QODER, "qoder", "0.2.67"),
+    )
+
+    data class InstallResult(val copied: Int, val settingsPath: String, val warning: String = "")
     data class LoginResult(val ok: Boolean, val output: String)
 
     @Synchronized
@@ -35,12 +41,12 @@ object MagpiePlugins {
         val settingsDir = File(layout.configDir, "magpie")
         val nodeModules = File(settingsDir, "plugins/node_modules")
         var copied = 0
-        for ((pkg, asset) in BUNDLED) {
-            val target = File(nodeModules, pkg)
-            if (!File(target, "package.json").isFile) {
-                val staging = File(nodeModules, pkg + ".staging")
+        for (bundle in BUNDLED) {
+            val target = File(nodeModules, bundle.pkg)
+            if (!isPackageReady(target, bundle.version)) {
+                val staging = File(nodeModules, bundle.pkg + ".staging")
                 if (staging.exists()) staging.deleteRecursively()
-                copyAssetTree(context, "magpie-plugins/$asset", staging)
+                copyAssetTree(context, "magpie-plugins/${bundle.asset}", staging)
                 if (target.exists()) target.deleteRecursively()
                 if (!staging.renameTo(target)) {
                     staging.copyRecursively(target, overwrite = true)
@@ -51,8 +57,15 @@ object MagpiePlugins {
         }
 
         val listFile = File(settingsDir, "plugins.json")
+        var warning = ""
         val root = if (listFile.isFile) {
-            runCatching { JSONObject(listFile.readText(Charsets.UTF_8)) }.getOrElse { JSONObject() }
+            val raw = listFile.readText(Charsets.UTF_8)
+            runCatching { JSONObject(raw) }.getOrElse {
+                val backup = File(settingsDir, "plugins.json.broken-${System.currentTimeMillis()}")
+                runCatching { listFile.copyTo(backup, overwrite = true) }
+                warning = "plugins.json 无法解析，已备份为 ${backup.name} 并重建"
+                JSONObject()
+            }
         } else {
             JSONObject()
         }
@@ -62,19 +75,22 @@ object MagpiePlugins {
             val spec = plugins.optJSONObject(i)?.optString("spec").orEmpty()
             if (spec.isNotBlank()) existing.add(packageName(spec))
         }
-        for ((pkg, _) in BUNDLED) {
-            if (!existing.contains(pkg)) {
-                plugins.put(JSONObject().put("spec", pkg))
+        for (bundle in BUNDLED) {
+            if (!existing.contains(bundle.pkg)) {
+                plugins.put(JSONObject().put("spec", bundle.pkg))
             }
         }
         listFile.parentFile?.mkdirs()
-        val temporary = File(settingsDir, "plugins.json.tmp")
-        temporary.writeText(root.toString(2), Charsets.UTF_8)
-        if (!temporary.renameTo(listFile)) {
-            listFile.delete()
-            temporary.renameTo(listFile)
+        val updated = root.toString(2)
+        if (!listFile.isFile || listFile.readText(Charsets.UTF_8) != updated) {
+            val temporary = File(settingsDir, "plugins.json.tmp")
+            temporary.writeText(updated, Charsets.UTF_8)
+            if (!temporary.renameTo(listFile)) {
+                listFile.delete()
+                temporary.renameTo(listFile)
+            }
         }
-        return InstallResult(copied, listFile.absolutePath)
+        return InstallResult(copied, listFile.absolutePath, warning)
     }
 
     fun login(
@@ -116,7 +132,8 @@ object MagpiePlugins {
                 LoginResult(false, "登录超时（180 秒）。请确认网络可以访问供应商站点后重试。")
             } else {
                 val output = runCatching { outputFile.readText(Charsets.UTF_8) }.getOrDefault("")
-                LoginResult(started.exitValue() == 0, output.takeLast(4000))
+                val safe = SecretRedactor.redact(output).replace(secret, "[REDACTED]")
+                LoginResult(started.exitValue() == 0, safe.takeLast(4000))
             }
         } catch (e: Exception) {
             LoginResult(false, e.message ?: e.javaClass.simpleName)
@@ -168,6 +185,17 @@ object MagpiePlugins {
 
     private fun signal(pid: Long, signal: Int) {
         runCatching { android.os.Process.sendSignal(pid.toInt(), signal) }
+    }
+
+    private fun isPackageReady(target: File, expectedVersion: String): Boolean {
+        if (!File(target, "package.json").isFile) return false
+        for (name in listOf("index.mjs", "opencode.mjs", "opencode2.mjs")) {
+            if (!File(target, name).isFile) return false
+        }
+        val version = runCatching {
+            JSONObject(File(target, "package.json").readText(Charsets.UTF_8)).optString("version")
+        }.getOrNull()
+        return version == expectedVersion
     }
 
     private fun packageName(spec: String): String {

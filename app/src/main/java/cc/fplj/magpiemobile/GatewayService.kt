@@ -36,12 +36,6 @@ class GatewayService : Service() {
         owner = GatewayRuntime.attach()
         NativeCoreSession.attach(owner, adminKey)
         try {
-            val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
-            MagpiePlugins.ensureInstalled(applicationContext, layout)
-        } catch (e: Exception) {
-            Log.w("MagpieGateway", "内置插件预置失败：" + (e.message ?: e.javaClass.simpleName))
-        }
-        try {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Magpie 网关", NotificationManager.IMPORTANCE_LOW),
             )
@@ -104,6 +98,10 @@ class GatewayService : Service() {
         controller = GatewayEngineController(
             launch = {
                 val layout = EnginePaths.buildLayout(applicationInfo.nativeLibraryDir, filesDir, cacheDir)
+                val install = MagpiePlugins.ensureInstalled(applicationContext, layout)
+                if (install.warning.isNotBlank()) {
+                    Log.w("MagpieGateway", install.warning)
+                }
                 val engineEnvironment = EngineEnvironment.prepare(layout) + mapOf(
                     "MAGPIE_WEB_KEY" to adminKey,
                     // Android 14+ system roots live in Conscrypt APEX. No TLS verification bypass.

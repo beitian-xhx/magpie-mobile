@@ -5,11 +5,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cc.fplj.magpiemobile.core.BunRuntimeInspector
 import cc.fplj.magpiemobile.core.EnginePaths
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class MagpieProvidersUiState(
     val bunReady: Boolean = false,
@@ -28,20 +30,24 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
     private val mutable = MutableStateFlow(MagpieProvidersUiState())
     val state = mutable.asStateFlow()
     private var layout: EnginePaths.Layout? = null
+    private val loginGate = AtomicBoolean(false)
 
     fun initialize(layout: EnginePaths.Layout) {
         this.layout = layout
         viewModelScope.launch(Dispatchers.IO) {
             val bun = BunRuntimeInspector.inspect(layout)
             val result = runCatching { MagpiePlugins.ensureInstalled(getApplication<Application>(), layout) }
+            val install = result.getOrNull()
             mutable.update {
                 it.copy(
                     bunReady = bun.executable,
                     ready = result.isSuccess,
-                    notice = result.fold(
-                        { r -> if (r.copied > 0) "已预置 ${r.copied} 个内置插件包" else "内置插件包已就绪" },
-                        { "" },
-                    ),
+                    notice = when {
+                        install == null -> ""
+                        install.warning.isNotBlank() -> install.warning
+                        install.copied > 0 -> "已预置 ${install.copied} 个内置插件包"
+                        else -> "内置插件包已就绪"
+                    },
                     error = result.exceptionOrNull()?.message ?: "",
                 )
             }
@@ -54,19 +60,26 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
             mutable.update { it.copy(notice = "", error = "请输入 API Key 或 PAT") }
             return
         }
+        if (!loginGate.compareAndSet(false, true)) return
+        mutable.update { it.copy(busy = true, notice = "", error = "") }
         viewModelScope.launch(Dispatchers.IO) {
-            mutable.update { it.copy(busy = true, notice = "", error = "") }
-            val result = try {
-                MagpiePlugins.login(getApplication<Application>(), layout, provider, method, secret)
-            } catch (e: Exception) {
-                MagpiePlugins.LoginResult(false, e.message ?: e.javaClass.simpleName)
-            }
-            mutable.update {
-                it.copy(
-                    busy = false,
-                    notice = if (result.ok) "登录成功：$provider。请重启网关后刷新模型列表。" else "",
-                    error = if (result.ok) "" else result.output.ifBlank { "登录失败，请检查 Key/PAT 与网络。" },
-                )
+            try {
+                val result = try {
+                    MagpiePlugins.login(getApplication<Application>(), layout, provider, method, secret)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    MagpiePlugins.LoginResult(false, e.message ?: e.javaClass.simpleName)
+                }
+                mutable.update {
+                    it.copy(
+                        busy = false,
+                        notice = if (result.ok) "登录成功：$provider。请重启网关后刷新模型列表。" else "",
+                        error = if (result.ok) "" else result.output.ifBlank { "登录失败，请检查 Key/PAT 与网络。" },
+                    )
+                }
+            } finally {
+                loginGate.set(false)
             }
         }
     }
