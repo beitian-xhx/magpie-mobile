@@ -246,7 +246,7 @@ object MagpiePlugins {
                     }
                 }
             }.apply { isDaemon = true; start() }
-            val finished = started.waitFor(480, TimeUnit.SECONDS)
+            val finished = started.waitFor(660, TimeUnit.SECONDS)
             if (!finished) {
                 stopProcessTree(started)
                 LoginResult(false, "登录超时。请在浏览器完成授权后切回 Magpie 等待，或重试。")

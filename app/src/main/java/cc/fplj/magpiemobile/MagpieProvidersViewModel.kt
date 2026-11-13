@@ -119,6 +119,6 @@ class MagpieProvidersViewModel(application: Application) : AndroidViewModel(appl
     }
 
     fun cancelLogin() {
-        MagpiePlugins.cancelLogin()
+        viewModelScope.launch(Dispatchers.IO) { MagpiePlugins.cancelLogin() }
     }
 }
